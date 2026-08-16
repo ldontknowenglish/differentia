@@ -1,0 +1,6 @@
+@echo off
+echo Installing required libraries...
+pip install -r requirements.txt
+echo Starting Research Notebook with Standardized Well Plate Visualizer...
+python -m streamlit run app.py
+pause
