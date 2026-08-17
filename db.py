@@ -1,4 +1,5 @@
 import sqlite3
+import pandas as pd
 
 DB_NAME = "notebook.db"
 
@@ -33,7 +34,6 @@ def init_db():
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS plates (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            project_id INTEGER,
             name TEXT NOT NULL,
             rows INTEGER DEFAULT 8,
             cols INTEGER DEFAULT 12,
@@ -42,7 +42,7 @@ def init_db():
         )
     """)
 
-    # Treatments table
+    # Treatments table (analysis_status 컬럼 포함)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS well_treatments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,6 +53,7 @@ def init_db():
             concentration TEXT,
             cell_info TEXT,
             note TEXT,
+            analysis_status TEXT DEFAULT '미진행',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (plate_id) REFERENCES plates(id) ON DELETE CASCADE
         )
@@ -70,14 +71,46 @@ def init_db():
         )
     """)
 
-    # --- 휴지통(Trash) 지원을 위한 컬럼 마이그레이션 ---
-    # 기존 DB 파일에도 안전하게 컬럼을 추가합니다 (이미 있으면 건너뜀).
-    for table in ["projects", "plates", "well_treatments", "daily_logs"]:
+    # Material Recipes table (레시피 메인)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS material_recipes (
+            recipe_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            recipe_name TEXT NOT NULL,
+            category TEXT,
+            prepared_date TEXT,
+            description TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Recipe Items table (레시피 성분 상세)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS recipe_items (
+            item_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            recipe_id INTEGER,
+            material_name TEXT NOT NULL,
+            manufacturer TEXT,
+            cat_no TEXT,
+            amount TEXT,
+            FOREIGN KEY (recipe_id) REFERENCES material_recipes (recipe_id) ON DELETE CASCADE
+        )
+    """)
+
+    # --- 기존 DB와의 호환성을 위한 컬럼 자동 마이그레이션 ---
+    for table in ["projects", "plates", "well_treatments", "daily_logs", "material_recipes"]:
         _ensure_column(cursor, table, "is_deleted", "INTEGER DEFAULT 0")
         _ensure_column(cursor, table, "deleted_at", "TIMESTAMP")
 
+    _ensure_column(cursor, "well_treatments", "analysis_status", "TEXT DEFAULT '미진행'")
+    _ensure_column(cursor, "material_recipes", "category", "TEXT")
+    _ensure_column(cursor, "material_recipes", "prepared_date", "TEXT")
+    _ensure_column(cursor, "recipe_items", "manufacturer", "TEXT")
+
     conn.commit()
     conn.close()
+
+# 프론트엔드 호환용 별칭
+init_recipe_db = init_db
 
 # =========================================================
 # Projects
@@ -176,26 +209,26 @@ def permanently_delete_plate(plate_id):
     conn.close()
 
 # =========================================================
-# Well treatments
+# Well treatments (수정 완료: 8개 인자 대응)
 # =========================================================
-def add_treatment(plate_id, well_position, treatment_date, compound_name, concentration, cell_info, note):
+def add_treatment(plate_id, well_position, treatment_date, compound_name, concentration, cell_info, note, analysis_status):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO well_treatments (plate_id, well_position, treatment_date, compound_name, concentration, cell_info, note)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (plate_id, well_position, treatment_date, compound_name, concentration, cell_info, note))
+        INSERT INTO well_treatments (plate_id, well_position, treatment_date, compound_name, concentration, cell_info, note, analysis_status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (plate_id, well_position, treatment_date, compound_name, concentration, cell_info, note, analysis_status))
     conn.commit()
     conn.close()
 
-def update_treatment(treatment_id, well_position, treatment_date, compound_name, concentration, cell_info, note):
+def update_treatment(treatment_id, well_position, treatment_date, compound_name, concentration, cell_info, note, analysis_status):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
         UPDATE well_treatments
-        SET well_position = ?, treatment_date = ?, compound_name = ?, concentration = ?, cell_info = ?, note = ?
+        SET well_position = ?, treatment_date = ?, compound_name = ?, concentration = ?, cell_info = ?, note = ?, analysis_status = ?
         WHERE id = ?
-    """, (well_position, treatment_date, compound_name, concentration, cell_info, note, treatment_id))
+    """, (well_position, treatment_date, compound_name, concentration, cell_info, note, analysis_status, treatment_id))
     conn.commit()
     conn.close()
 
@@ -284,6 +317,103 @@ def permanently_delete_daily_log(log_id):
     conn.close()
 
 # =========================================================
+# Material Recipes (시약 및 레시피 관리)
+# =========================================================
+def save_material_recipe(recipe_name, category, prepared_date, description, items):
+    """
+    items 형식 예시:
+    [
+        {'material_name': 'RPMI1640', 'manufacturer': 'Gibco', 'cat_no': '11875093', 'amount': '500 mL'}
+    ]
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO material_recipes (recipe_name, category, prepared_date, description) 
+        VALUES (?, ?, ?, ?)
+    """, (recipe_name, category, prepared_date, description))
+    
+    recipe_id = cursor.lastrowid
+    
+    for item in items:
+        cursor.execute("""
+            INSERT INTO recipe_items (recipe_id, material_name, manufacturer, cat_no, amount) 
+            VALUES (?, ?, ?, ?, ?)
+        """, (
+            recipe_id, 
+            item.get('material_name', ''), 
+            item.get('manufacturer', ''), 
+            item.get('cat_no', ''), 
+            item.get('amount', '')
+        ))
+    
+    conn.commit()
+    conn.close()
+    return recipe_id
+
+def get_all_recipes(as_df=False):
+    """레시피 목록 조회"""
+    conn = get_connection()
+    if as_df:
+        df = pd.read_sql_query("SELECT * FROM material_recipes WHERE is_deleted = 0 ORDER BY created_at DESC", conn)
+        conn.close()
+        return df
+    else:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM material_recipes WHERE is_deleted = 0 ORDER BY created_at DESC")
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+def get_all_categories():
+    """DB에 등록된 고유 카테고리 목록 조회"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT DISTINCT category FROM material_recipes WHERE is_deleted = 0 AND category IS NOT NULL AND category != ''")
+    categories = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    return categories
+
+def get_recipe_details(recipe_id, as_df=False):
+    """특정 레시피의 성분 항목 조회 (제조사 포함)"""
+    conn = get_connection()
+    if as_df:
+        df = pd.read_sql_query("SELECT material_name, manufacturer, cat_no, amount FROM recipe_items WHERE recipe_id = ?", conn, params=(recipe_id,))
+        conn.close()
+        return df
+    else:
+        cursor = conn.cursor()
+        cursor.execute("SELECT item_id, recipe_id, material_name, manufacturer, cat_no, amount FROM recipe_items WHERE recipe_id = ?", (recipe_id,))
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+def delete_recipe(recipe_id):
+    """휴지통으로 이동 (소프트 삭제)"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE material_recipes SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE recipe_id = ?", (recipe_id,))
+    conn.commit()
+    conn.close()
+
+def restore_recipe(recipe_id):
+    """휴지통에서 레시피 복구"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE material_recipes SET is_deleted = 0, deleted_at = NULL WHERE recipe_id = ?", (recipe_id,))
+    conn.commit()
+    conn.close()
+
+def permanently_delete_recipe(recipe_id):
+    """영구 삭제"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM material_recipes WHERE recipe_id = ?", (recipe_id,))
+    cursor.execute("DELETE FROM recipe_items WHERE recipe_id = ?", (recipe_id,))
+    conn.commit()
+    conn.close()
+
+# =========================================================
 # Trash (휴지통)
 # =========================================================
 def get_trash_projects():
@@ -337,10 +467,19 @@ def get_trash_daily_logs():
     conn.close()
     return [dict(r) for r in rows]
 
+def get_trash_recipes():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM material_recipes WHERE is_deleted = 1 ORDER BY deleted_at DESC")
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
 def get_trash_count():
     return (
         len(get_trash_projects())
         + len(get_trash_plates())
         + len(get_trash_treatments())
         + len(get_trash_daily_logs())
+        + len(get_trash_recipes())
     )
