@@ -326,7 +326,6 @@ else:
             dates_available = sorted(list(set([t['treatment_date'] for t in treatments]))) if treatments else []
 
             with left_col:
-                st.markdown("##### 🧫 플레이트 배치 시각화")
                 col_v1, col_v2 = st.columns([1.2, 1.8])
                 with col_v1:
                     selected_date = st.selectbox("📅 조회 날짜", options=["전체 날짜 (최신 상태)"] + dates_available, key="v_date_select")
