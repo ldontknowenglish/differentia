@@ -22,7 +22,7 @@ st.markdown("""
 if hasattr(style, "apply_custom_style"):
     style.apply_custom_style()
 
-st.title("🧪 연구 프로젝트")
+st.title("🧪 Experiment project")
 st.caption("새 연구 프로젝트를 생성하고 그룹별로 분류/검색하며, Plate 및 Well별 처리 흐름을 상세 조회합니다.")
 
 # DB 초기화 및 데이터 로드
@@ -103,7 +103,6 @@ with st.sidebar:
         f'<div style="display:inline-block; width:20px; height:20px; background-color:{c}; border-radius:4px; margin-right:6px; vertical-align:middle; border: {"2px solid #0f172a" if c == selected_preset else "1px solid #cbd5e1"};"></div>'
         for c in color_map.keys()
     ])
-    st.markdown(f'<div style="margin-bottom:12px; font-size:13px; color:#475569;"><b>컬러 팔레트 미리보기:</b> {swatch_html}</div>', unsafe_allow_html=True)
 
     p_color = st.color_picker("색상 커스텀 지정", value=selected_preset)
     p_desc = st.text_area("설명", placeholder="프로젝트 목적 및 실험 조건 작성")
