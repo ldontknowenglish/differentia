@@ -862,7 +862,20 @@ else:
         # ======================================================================
         # [TAB 2] 계통도 탭
         # ======================================================================
-     with tab_treat:
+     
+      with tab_tree:
+            st.caption("💡 작성하신 **`세포/오가노이드 정보`**와 **`처리 일자`**의 순서를 자동으로 분석하여 가로형 계통도로 시각화합니다.")
+            
+            dot_code = generate_dynamic_lineage_dot(treatments)
+            if dot_code:
+                st.graphviz_chart(dot_code, use_container_width=True)
+            else:
+                st.info("💡 계통도를 그릴 세포 정보 데이터가 없습니다.")
+
+        # ======================================================================
+        # [TAB 3] 물질/세포 처리 입력 및 전체 이력 관리
+        # ======================================================================  
+        with tab_treat:
             r1_c1, r1_c2 = st.columns(2)
             with r1_c1:
                 t_date = st.date_input("처리 일자 (Date)", datetime.date.today(), key="t_date_main")
