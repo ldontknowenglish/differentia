@@ -235,4 +235,243 @@ def update_treatment(treatment_id, well_position, treatment_date, compound_name,
 
 def get_treatments_by_plate(plate_id):
     conn = get_connection()
-    cursor = conn
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM well_treatments WHERE plate_id = ? AND is_deleted = 0 ORDER BY treatment_date ASC, well_position ASC", (plate_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def get_treatments_by_project(project_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT wt.*, p.name as plate_name 
+        FROM well_treatments wt 
+        JOIN plates p ON wt.plate_id = p.id 
+        WHERE p.project_id = ? AND wt.is_deleted = 0 AND p.is_deleted = 0
+        ORDER BY wt.treatment_date ASC, p.name ASC, wt.well_position ASC
+    """, (project_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def delete_treatment(treatment_id):
+    """휴지통으로 이동 (소프트 삭제)"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE well_treatments SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE id = ?", (treatment_id,))
+    conn.commit()
+    conn.close()
+
+def restore_treatment(treatment_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE well_treatments SET is_deleted = 0, deleted_at = NULL WHERE id = ?", (treatment_id,))
+    conn.commit()
+    conn.close()
+
+def permanently_delete_treatment(treatment_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM well_treatments WHERE id = ?", (treatment_id,))
+    conn.commit()
+    conn.close()
+
+# =========================================================
+# Daily logs
+# =========================================================
+def add_daily_log(project_id, log_date, content):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO daily_logs (project_id, log_date, content) VALUES (?, ?, ?)", (project_id, log_date, content))
+    conn.commit()
+    conn.close()
+
+def get_daily_logs(project_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM daily_logs WHERE project_id = ? AND is_deleted = 0 ORDER BY log_date DESC", (project_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def delete_daily_log(log_id):
+    """휴지통으로 이동 (소프트 삭제)"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE daily_logs SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE id = ?", (log_id,))
+    conn.commit()
+    conn.close()
+
+def restore_daily_log(log_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE daily_logs SET is_deleted = 0, deleted_at = NULL WHERE id = ?", (log_id,))
+    conn.commit()
+    conn.close()
+
+def permanently_delete_daily_log(log_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM daily_logs WHERE id = ?", (log_id,))
+    conn.commit()
+    conn.close()
+
+# =========================================================
+# Material Recipes (시약 및 레시피 관리)
+# =========================================================
+def save_material_recipe(recipe_name, category, prepared_date, description, items):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO material_recipes (recipe_name, category, prepared_date, description) 
+        VALUES (?, ?, ?, ?)
+    """, (recipe_name, category, prepared_date, description))
+    
+    recipe_id = cursor.lastrowid
+    
+    for item in items:
+        cursor.execute("""
+            INSERT INTO recipe_items (recipe_id, material_name, manufacturer, cat_no, amount) 
+            VALUES (?, ?, ?, ?, ?)
+        """, (
+            recipe_id, 
+            item.get('material_name', ''), 
+            item.get('manufacturer', ''), 
+            item.get('cat_no', ''), 
+            item.get('amount', '')
+        ))
+    
+    conn.commit()
+    conn.close()
+    return recipe_id
+
+def get_all_recipes(as_df=False):
+    conn = get_connection()
+    if as_df:
+        df = pd.read_sql_query("SELECT * FROM material_recipes WHERE is_deleted = 0 ORDER BY created_at DESC", conn)
+        conn.close()
+        return df
+    else:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM material_recipes WHERE is_deleted = 0 ORDER BY created_at DESC")
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+def get_all_categories():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT DISTINCT category FROM material_recipes WHERE is_deleted = 0 AND category IS NOT NULL AND category != ''")
+    categories = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    return categories
+
+def get_recipe_details(recipe_id, as_df=False):
+    conn = get_connection()
+    if as_df:
+        df = pd.read_sql_query("SELECT material_name, manufacturer, cat_no, amount FROM recipe_items WHERE recipe_id = ?", conn, params=(recipe_id,))
+        conn.close()
+        return df
+    else:
+        cursor = conn.cursor()
+        cursor.execute("SELECT item_id, recipe_id, material_name, manufacturer, cat_no, amount FROM recipe_items WHERE recipe_id = ?", (recipe_id,))
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+def delete_recipe(recipe_id):
+    """휴지통으로 이동 (소프트 삭제)"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE material_recipes SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE recipe_id = ?", (recipe_id,))
+    conn.commit()
+    conn.close()
+
+def restore_recipe(recipe_id):
+    """휴지통에서 레시피 복구"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE material_recipes SET is_deleted = 0, deleted_at = NULL WHERE recipe_id = ?", (recipe_id,))
+    conn.commit()
+    conn.close()
+
+def permanently_delete_recipe(recipe_id):
+    """영구 삭제"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM material_recipes WHERE recipe_id = ?", (recipe_id,))
+    cursor.execute("DELETE FROM recipe_items WHERE recipe_id = ?", (recipe_id,))
+    conn.commit()
+    conn.close()
+
+# =========================================================
+# Trash (휴지통)
+# =========================================================
+def get_trash_projects():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM projects WHERE is_deleted = 1 ORDER BY deleted_at DESC")
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def get_trash_plates():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT pl.*, p.name as project_name
+        FROM plates pl
+        LEFT JOIN projects p ON pl.project_id = p.id
+        WHERE pl.is_deleted = 1
+        ORDER BY pl.deleted_at DESC
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def get_trash_treatments():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT wt.*, pl.name as plate_name, pr.name as project_name
+        FROM well_treatments wt
+        LEFT JOIN plates pl ON wt.plate_id = pl.id
+        LEFT JOIN projects pr ON pl.project_id = pr.id
+        WHERE wt.is_deleted = 1
+        ORDER BY wt.deleted_at DESC
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def get_trash_daily_logs():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT dl.*, p.name as project_name
+        FROM daily_logs dl
+        LEFT JOIN projects p ON dl.project_id = p.id
+        WHERE dl.is_deleted = 1
+        ORDER BY dl.deleted_at DESC
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def get_trash_recipes():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM material_recipes WHERE is_deleted = 1 ORDER BY deleted_at DESC")
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def get_trash_count():
+    return (
+        len(get_trash_projects())
+        + len(get_trash_plates())
+        + len(get_trash_treatments())
+        + len(get_trash_daily_logs())
+        + len(get_trash_recipes())
+    )
