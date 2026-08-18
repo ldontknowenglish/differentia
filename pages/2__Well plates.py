@@ -862,19 +862,7 @@ else:
         # ======================================================================
         # [TAB 2] 계통도 탭
         # ======================================================================
-        with tab_tree:
-            st.caption("💡 작성하신 **`세포/오가노이드 정보`**와 **`처리 일자`**의 순서를 자동으로 분석하여 가로형 계통도로 시각화합니다.")
-            
-            dot_code = generate_dynamic_lineage_dot(treatments)
-            if dot_code:
-                st.graphviz_chart(dot_code, use_container_width=True)
-            else:
-                st.info("💡 계통도를 그릴 세포 정보 데이터가 없습니다.")
-
-        # ======================================================================
-        # [TAB 3] 물질/세포 처리 입력 및 전체 이력 관리
-        # ======================================================================
-       with tab_treat:
+     with tab_treat:
             r1_c1, r1_c2 = st.columns(2)
             with r1_c1:
                 t_date = st.date_input("처리 일자 (Date)", datetime.date.today(), key="t_date_main")
@@ -1086,7 +1074,43 @@ else:
                                 if new_img is not None:
                                     final_img_b64 = file_to_base64(new_img)
 
-                                comb_note = build_combined_note(
+                                comb_note = build_combined_note(e_basal, e_note, final_img_b64)
+                                to_update_data.append({
+                                    'id': item['id'],
+                                    'pos': e_pos.strip().upper(),
+                                    'date': str(e_date),
+                                    'comp': e_comp.strip(),
+                                    'conc': e_conc.strip(),
+                                    'cell': e_cell.strip(),
+                                    'note': comb_note,
+                                    'analysis': e_analysis
+                                })
+                                to_delete_ids.append(item['id'])
+
+                # --- [일괄 처리 버튼 액션 실행] ---
+                if batch_update_btn:
+                    if to_update_data:
+                        for d in to_update_data:
+                            db.update_treatment(
+                                d['id'], d['pos'], d['date'],
+                                d['comp'], d['conc'], d['cell'], d['note'], d['analysis']
+                            )
+                        st.success(f"선택된 {len(to_update_data)}개 항목이 일괄 수정되었습니다!")
+                        st.rerun()
+                    else:
+                        st.warning("수정(체크)된 항목이 없습니다.")
+
+                if batch_delete_btn:
+                    if to_delete_ids:
+                        for d_id in to_delete_ids:
+                            db.delete_treatment(d_id)
+                        st.success(f"선택된 {len(to_delete_ids)}개 항목이 일괄 삭제되었습니다!")
+                        st.rerun()
+                    else:
+                        st.warning("삭제(체크)된 항목이 없습니다.")
+
+            else:
+                st.caption("아직 처리된 내역이 없습니다.")
                                     
         # ======================================================================
         # [TAB 4] 날짜별 및 조건별 사진 비교 시각화
