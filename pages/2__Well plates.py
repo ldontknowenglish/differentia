@@ -26,7 +26,7 @@ if hasattr(style, "apply_custom_style"):
     style.apply_custom_style()
 
 
-st.title("🧫 시각화 및 세포 오가노이드 처리 관리")
+st.title("🧫 treatment confirm")
 
 # ======================================================================
 # [이미지 및 데이터 파싱 헬퍼 함수]
