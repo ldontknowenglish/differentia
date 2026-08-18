@@ -19,7 +19,7 @@ st.caption("각종 배지 및 시약 조제법과 구성 물질의 Catalog No.(C
 # ---------------------------------------------------------
 # 세션 스테이트: 카테고리 항목 동적 관리 Initializer
 # ---------------------------------------------------------
-DEFAULT_CATEGORIES = ["DE 분화", "VO 분화", "장 상피 분화", "미분화 유지 배지", "공통 시약/버퍼"]
+DEFAULT_CATEGORIES = ["공통 시약/버퍼"]
 
 if "custom_categories" not in st.session_state:
     st.session_state.custom_categories = DEFAULT_CATEGORIES.copy()
