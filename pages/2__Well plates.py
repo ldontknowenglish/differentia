@@ -874,22 +874,21 @@ else:
         # ======================================================================
         # [TAB 3] 물질/세포 처리 입력 및 전체 이력 관리
         # ======================================================================
-        with tab_treat:
-            
+       with tab_treat:
             r1_c1, r1_c2 = st.columns(2)
             with r1_c1:
                 t_date = st.date_input("처리 일자 (Date)", datetime.date.today(), key="t_date_main")
             with r1_c2:
                 t_well = st.text_input("웰 위치 (Well Position)*", placeholder="예: A1, B2 또는 A1,A2,A3", key="t_well_main")
-            
+
             t_cell = st.text_input("세포/오가노이드 정보", placeholder="예: iPSC, DE, HIO", key="t_cell_main")
-            
+
             r2_c1, r2_c2 = st.columns(2)
             with r2_c1:
                 t_analysis = st.selectbox("🔬 분석진행 상태", options=ANALYSIS_OPTIONS, key="t_analysis_main")
-            
+
             t_analysis_val = st.session_state.get("t_analysis_main", "미진행")
-            
+
             with r2_c2:
                 if t_analysis_val == "미진행":
                     t_basal = st.selectbox("Basal Media (레시피 선택)", options=get_recipe_options(), key="t_basal_main")
@@ -900,7 +899,7 @@ else:
             if t_analysis_val == "미진행":
                 st.caption("🧪 **처리 물질 및 농도 (2쌍씩 같은 열 관리)**")
                 num_t_pairs = st.number_input("입력할 물질 쌍 개수", min_value=1, max_value=10, value=2, key="t_num_pairs_main")
-                
+
                 t_comps, t_concs = [], []
                 for i in range(0, int(num_t_pairs), 2):
                     pair_cols = st.columns([2, 1, 2, 1])
@@ -911,7 +910,7 @@ else:
                     if c_val.strip():
                         t_comps.append(c_val.strip())
                         t_concs.append(n_val.strip())
-                        
+
                     if i + 1 < int(num_t_pairs):
                         with pair_cols[2]:
                             c2_val = st.text_input(f"물질 #{i+2}", placeholder="추가 물질", key=f"t_c_main_{i+1}")
@@ -935,7 +934,7 @@ else:
                     combined_concs = ", ".join(t_concs)
                     img_b64 = file_to_base64(t_file)
                     comb_note = build_combined_note(t_basal, t_note, img_b64)
-                    
+
                     for w in wells:
                         db.add_treatment(
                             selected_plate['id'], w, str(t_date),
@@ -947,16 +946,37 @@ else:
                     st.error("웰 위치와 최소 하나 이상의 물질명(또는 분석 모드)을 확인해 주세요.")
 
             st.markdown("---")
-            st.subheader("📋 전체 물질 처리 이력 관리 (수정/삭제/사진관리)")
+            st.subheader("📋 전체 물질 처리 이력 관리 (일괄 수정/삭제)")
+
             if treatments:
+                # --- [일괄 처리 버튼 영역] ---
+                batch_col1, batch_col2 = st.columns(2)
+                with batch_col1:
+                    batch_update_btn = st.button("💾 선택한 항목 일괄 저장", type="primary", use_container_width=True)
+                with batch_col2:
+                    batch_delete_btn = st.button("🗑️ 선택한 항목 일괄 삭제", type="secondary", use_container_width=True)
+
+                st.markdown("")
+
+                # 수정된 데이터 임시 저장소 관리 혹은 각 항목 렌더링
                 list_cols = st.columns(2)
+                
+                # 일괄 처리를 위한 대상 ID 저장용 리스트
+                to_delete_ids = []
+                to_update_data = []
+
                 for idx, item in enumerate(treatments):
                     with list_cols[idx % 2]:
                         b_media_val, pure_note_val, cur_img_b64 = parse_note_basal_image(item)
                         img_flag = "📷 " if cur_img_b64 else ""
                         formatted_cond = format_compound_summary(item['compound_name'], item['concentration'])
                         analysis_lbl = item.get('analysis_status', '미진행')
-                        with st.expander(f"{img_flag}📍 Well [{item['well_position']}] | 📅 {item['treatment_date']} | 🧬 {item.get('cell_info', '-')} ({analysis_lbl}) | 🧪 {formatted_cond}"):
+
+                        with st.expander(f"{img_flag}📍 Well [{item['well_position']}] | 📅 {item['treatment_date']} | 🧬 {item.get('cell_info', '-')} ({analysis_lbl})"):
+                            
+                            # 일괄 처리를 위한 선택 체크박스 추가
+                            is_selected = st.checkbox("선택 (일괄 처리용)", key=f"chk_select_{item['id']}")
+
                             try:
                                 default_d = datetime.datetime.strptime(item['treatment_date'], "%Y-%m-%d").date()
                             except:
@@ -969,16 +989,16 @@ else:
                                 e_pos = st.text_input("웰 위치", value=item['well_position'], key=f"t_e_pos_{item['id']}")
 
                             e_cell = st.text_input("세포 정보", value=item['cell_info'] if item['cell_info'] else "", key=f"t_e_cell_{item['id']}")
-                            
+
                             e_cur_analysis = item.get('analysis_status', '미진행')
                             e_a_idx = ANALYSIS_OPTIONS.index(e_cur_analysis) if e_cur_analysis in ANALYSIS_OPTIONS else 0
-                            
+
                             r2_c1, r2_c2 = st.columns(2)
                             with r2_c1:
                                 e_analysis = st.selectbox("🔬 분석진행 상태", options=ANALYSIS_OPTIONS, index=e_a_idx, key=f"t_e_analysis_{item['id']}")
-                            
+
                             e_cur_s_analysis = st.session_state.get(f"t_e_analysis_{item['id']}", e_cur_analysis)
-                            
+
                             with r2_c2:
                                 if e_cur_s_analysis == "미진행":
                                     e_b_opts = get_recipe_options(b_media_val)
@@ -992,15 +1012,15 @@ else:
                                 st.caption("🧪 **물질/약물 조합 및 농도 (2쌍씩 같은 열 관리)**")
                                 e_existing_comps = [c.strip() for c in str(item['compound_name']).split(',') if c.strip()]
                                 e_existing_concs = [c.strip() for c in str(item['concentration']).split(',')] if item['concentration'] else []
-                                
+
                                 e_num_pairs = st.number_input("입력할 물질 쌍 개수", min_value=1, max_value=10, value=max(1, len(e_existing_comps)), key=f"t_e_num_pairs_{item['id']}")
-                                
+
                                 e_comps, e_concs = [], []
                                 for sub_idx in range(0, int(e_num_pairs), 2):
                                     pair_cols = st.columns([2, 1, 2, 1])
                                     def_c = e_existing_comps[sub_idx] if sub_idx < len(e_existing_comps) else ""
                                     def_n = e_existing_concs[sub_idx] if sub_idx < len(e_existing_concs) else ""
-                                    
+
                                     with pair_cols[0]:
                                         c_val = st.text_input(f"물질 #{sub_idx+1}", value=def_c, placeholder="예: VEGF", key=f"t_e_c_{item['id']}_{sub_idx}")
                                     with pair_cols[1]:
@@ -1008,7 +1028,7 @@ else:
                                     if c_val.strip():
                                         e_comps.append(c_val.strip())
                                         e_concs.append(n_val.strip())
-                                        
+
                                     if sub_idx + 1 < int(e_num_pairs):
                                         def_c2 = e_existing_comps[sub_idx+1] if sub_idx+1 < len(e_existing_comps) else ""
                                         def_n2 = e_existing_concs[sub_idx+1] if sub_idx+1 < len(e_existing_concs) else ""
@@ -1024,7 +1044,6 @@ else:
                             else:
                                 e_comp = f"분석 진행 ({e_cur_s_analysis})"
                                 e_conc = ""
-                                st.info(f"🔬 **{e_cur_s_analysis}** 분석 모드입니다.")
 
                             e_note = st.text_input("비고 / 상세 조건", value=pure_note_val, key=f"t_e_note_{item['id']}")
 
@@ -1036,9 +1055,10 @@ else:
 
                             new_img = st.file_uploader("사진 교체/추가", type=["png", "jpg", "jpeg"], key=f"f_e_{item['id']}")
 
+                            # 만약 개별 저장/삭제도 그대로 유지하고 싶다면 아래 코드를 살려둘 수 있습니다.
                             btn_c1, btn_c2 = st.columns(2)
                             with btn_c1:
-                                if st.button("💾 저장", key=f"btn_t_update_{item['id']}", use_container_width=True):
+                                if st.button("💾 개별 저장", key=f"btn_t_update_{item['id']}", use_container_width=True):
                                     final_img_b64 = cur_img_b64
                                     if del_img:
                                         final_img_b64 = None
@@ -1053,13 +1073,21 @@ else:
                                     st.toast("수정되었습니다!", icon="✅")
                                     st.rerun()
                             with btn_c2:
-                                if st.button("🗑️ 삭제", key=f"btn_t_del_{item['id']}", type="secondary", use_container_width=True):
+                                if st.button("🗑️ 개별 삭제", key=f"btn_t_del_{item['id']}", type="secondary", use_container_width=True):
                                     db.delete_treatment(item['id'])
                                     st.toast("삭제되었습니다.", icon="🗑️")
                                     st.rerun()
-            else:
-                st.caption("아직 처리된 내역이 없습니다.")
 
+                            # 일괄 처리를 위해 선택된 경우 데이터 수집
+                            if is_selected:
+                                final_img_b64 = cur_img_b64
+                                if del_img:
+                                    final_img_b64 = None
+                                if new_img is not None:
+                                    final_img_b64 = file_to_base64(new_img)
+
+                                comb_note = build_combined_note(
+                                    
         # ======================================================================
         # [TAB 4] 날짜별 및 조건별 사진 비교 시각화
         # ======================================================================
