@@ -69,7 +69,7 @@ with st.sidebar:
 # ==========================================
 st.title("🔬 실험 데이터 입력 및 배치 분석")
 
-st.markdown("### 📋 공통 실험 메타데이터 (한번에 관리)")
+st.markdown("### 📋 공통 실험 메타데이터")
 st.caption("배치 정보와 실험 날짜 관련 메타데이터를 통합하여 한곳에서 관리합니다.")
 
 with st.container(border=True):
@@ -110,7 +110,7 @@ def parse_input_data(uploaded_file, raw_text):
 tab1, tab2, tab3, tab4 = st.tabs(["🧫 Cell Count", "🧬 qPCR", "📊 FACS", "📈 배치 간 비교 분석 및 종합 보고서"])
 
 
-# [개편된 레이아웃] 데이터 입력(좌) / 데이터 수정·삭제(우) UI 랜더링 함수
+# 데이터 입력(좌) / 데이터 검토 및 저장(우) / 이력 관리(하단) UI 랜더링 함수
 def render_analysis_tab(assay_name, example_text, is_cell_count=False):
     st.subheader(f"{assay_name} 데이터 작업")
 
@@ -140,7 +140,7 @@ def render_analysis_tab(assay_name, example_text, is_cell_count=False):
         st.markdown("##### ✏️ 2. 신규 데이터 검토 및 수정 / 삭제")
         
         if df_parsed is not None:
-            st.caption("💡 **수정/삭제**: 셀 값을 직접 수정하거나 행 선택 후 `Del`키로 삭제 후 DB에 저장하세요.")
+            st.caption("💡 **수정/삭제**: 셀 값을 수정하거나 삭제할 행 선택 후 `Del`키를 누르고 DB에 저장하세요.")
 
             df_working = df_parsed.copy()
 
@@ -151,7 +151,7 @@ def render_analysis_tab(assay_name, example_text, is_cell_count=False):
                     df_working["Count_2nd"] = pd.to_numeric(df_working["Count_2nd"], errors="coerce")
                     df_working["Count_Mean"] = df_working[["Count_1st", "Count_2nd"]].mean(axis=1).round(3)
 
-            # 사용자 지정 폼 형태 그대로 편집기 표시 (불필요한 메타데이터 컬럼 미포함)
+            # 데이터 편집기
             edited_df = st.data_editor(
                 df_working, 
                 num_rows="dynamic", 
@@ -160,17 +160,19 @@ def render_analysis_tab(assay_name, example_text, is_cell_count=False):
             )
 
             if st.button(f"💾 [{assay_name}] 데이터 DB 저장", key=f"btn_save_{assay_name}", type="primary"):
-                # 작성한 폼 형태 그대로 DB에 저장
+                # 검토/수정한 'edited_df' 형태 그대로 DB에 동기화 저장
                 db.save_analysis_data(current_batch, assay_name, edited_df)
-                st.success(f"[{current_batch}] 배치의 {assay_name} 데이터가 성공적으로 저장되었습니다!")
+                st.toast(f"[{current_batch}] {assay_name} 데이터가 성공적으로 DB에 저장되었습니다!", icon="✅")
+                # 즉시 화면을 다시 그려 하단 이력 관리에 반영
+                st.rerun()
         else:
-            st.info("👈 왼쪽에서 데이터를 입력하거나 파일을 업로드하면, 이곳에 편집 테이블이 활성화됩니다.")
+            st.info("👈 왼쪽에서 데이터를 입력하거나 파일/텍스트를 올리면, 이곳에 수정 및 삭제 가능한 편집기 테이블이 나타납니다.")
 
     st.divider()
 
-    # 3. DB 저장 이력 조회 및 수정/삭제 (입력 폼과 동일한 구조 유지)
+    # 3. DB 저장 이력 조회 및 수정/삭제
     st.markdown(f"#### 📜 [{current_batch}] 저장된 데이터 이력 관리")
-    st.caption("💡 작성했던 데이터 폼 규격 그대로 저장된 이력입니다. 수정 후 아래 업데이트 버튼을 누르세요.")
+    st.caption("💡 신규 데이터로 검토 및 저장된 데이터 폼 그대로 이력이 관리됩니다.")
     
     saved_df = db.get_analysis_data(current_batch, assay_name)
 
@@ -184,13 +186,13 @@ def render_analysis_tab(assay_name, example_text, is_cell_count=False):
         
         if st.button(f"🔄 [{assay_name}] DB 변경사항 업데이트", key=f"btn_update_{assay_name}"):
             db.save_analysis_data(current_batch, assay_name, updated_db_df)
-            st.success("데이터베이스가 성공적으로 업데이트되었습니다!")
+            st.toast("데이터베이스가 성공적으로 업데이트되었습니다!", icon="🔄")
             st.rerun()
     else:
-        st.caption(f"현재 선택된 배치({current_batch})에 저장된 {assay_name} 데이터가 없습니다.")
+        st.caption(f"현재 선택된 배치({current_batch})에 저장된 {assay_name} 데이터 이력이 없습니다.")
 
 
-# --- 탭 1: Cell Count (1차, 2차, 평균 수치 관리 규격 적용) ---
+# --- 탭 1: Cell Count ---
 with tab1:
     render_analysis_tab(
         "Cell Count",
@@ -263,7 +265,6 @@ with tab4:
                 col_cc_graph, col_cc_table = st.columns([3, 2])
                 
                 with col_cc_graph:
-                    # 평균값(Count_Mean) 우선 시각화
                     target_col = "Count_Mean" if "Count_Mean" in cc_combined.columns else "Count_1st"
                     
                     if target_col in cc_combined.columns:
