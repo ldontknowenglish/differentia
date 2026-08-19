@@ -71,14 +71,41 @@ with st.sidebar:
 
     st.divider()
 
+    # 2. 선택한 배치의 조건 설정
+    st.subheader("📋 배치 시작 조건")
+
+    cell_type = st.selectbox(
+        "세포 / 오가노이드 종류",
+        [
+            "Blood Vessel Organoid",
+            "Intestinal Assembloid",
+            "iPSC-derived Line",
+            "Primary Cell Line",
+        ],
+    )
+
+    culture_stage = st.text_input("배양/분화 단계", value="Day 0 (Seeding)")
+
+    media_condition = st.selectbox(
+        "배지 조건 (Media Condition)",
+        [
+            "Chemically Defined (Animal-Free)",
+            "Growth Factor High",
+            "Standard Medium",
+        ],
+    )
+
     # 선택 요약 정보 표시
     st.info(
         f"""
     **현재 선택된 배치 요약**
     - **ID / 플레이트**: `{current_batch}`
     - **종류**: {cell_type}
+    - **단계**: {culture_stage}
+    - **배지**: {media_condition}
     """
     )
+
 
 
 # ==========================================
