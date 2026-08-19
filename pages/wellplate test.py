@@ -277,28 +277,6 @@ else:
             st.info("💡 선택된 프로젝트에 등록된 플레이트가 없습니다. 아래에서 생성해 주세요.")
             selected_plate = None
 
-        st.markdown("---")
-        with st.expander("➕ 새 규격 플레이트 생성", expanded=not bool(plates)):
-            with st.form("add_plate_form", clear_on_submit=True):
-                plate_name = st.text_input("플레이트 이름*", placeholder="예: 96-Well Plate #1")
-                selected_preset_label = st.selectbox("🧫 플레이트 표준 규격 선택*", list(PLATE_PRESETS.keys()))
-
-                if PLATE_PRESETS[selected_preset_label] == "custom":
-                    p_rows = st.number_input("행 개수 (Rows)", min_value=1, max_value=16, value=8)
-                    p_cols = st.number_input("열 개수 (Cols)", min_value=1, max_value=24, value=12)
-                else:
-                    p_rows, p_cols = PLATE_PRESETS[selected_preset_label]
-                    st.caption(f"💡 선택된 규격: **{p_rows} 행 x {p_cols} 열**")
-
-                p_submit = st.form_submit_button("플레이트 추가", use_container_width=True)
-                if p_submit:
-                    if plate_name.strip():
-                        db.add_plate(selected_proj['id'], plate_name.strip(), p_rows, p_cols)
-                        st.success(f"'{plate_name}' 플레이트 생성 완료!")
-                        st.rerun()
-                    else:
-                        st.error("플레이트 이름을 입력해 주세요.")
-
     if selected_plate:
         treatments = db.get_treatments_by_plate(selected_plate['id'])
         
