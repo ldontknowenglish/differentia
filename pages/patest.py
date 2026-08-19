@@ -15,45 +15,63 @@ db.init_analysis_tables()
 # ==========================================
 # 🧫 [사이드바] 배치(Batch) 선택 및 정보 설정
 # ==========================================
+import streamlit as st
+import db
+
+# 1. DB 초기화 및 프로젝트 목록 조회
+db.init_db()
+projects = db.get_projects()
+
 with st.sidebar:
     st.header("🧫 실험 배치(Batch) 선택")
 
-    # DB에 기존 등록된 Plate 정보를 가져와 배치 목록으로 활용
-    projects = db.get_projects()
-
-    if "batch_list" not in st.session_state:
-        st.session_state["batch_list"] = [
-            "Batch_20260819_01",
-            "Batch_20260815_02",
-            "Batch_20260801_03",
-        ]
-
-    # 1. 배치 ID 선택 (새 배치 추가 옵션 포함)
-    selected_batch = st.selectbox(
-        "작업할 배치(Batch ID)를 선택하세요",
-        options=st.session_state["batch_list"] + ["➕ 새 배치 직접 등록"],
-    )
-
-    # 1-1. 새 배치 등록 로직
-    if selected_batch == "➕ 새 배치 직접 등록":
-        new_batch_id = st.text_input(
-            "새 배치 ID 입력", placeholder="예: Batch_20260820_01"
-        )
-        if st.button("배치 추가"):
-            if (
-                new_batch_id
-                and new_batch_id not in st.session_state["batch_list"]
-            ):
-                st.session_state["batch_list"].append(new_batch_id)
-                st.success(f"'{new_batch_id}' 등록 완료!")
-                st.rerun()
-        current_batch = new_batch_id if new_batch_id else "미지정"
+    # DB에 등록된 프로젝트가 없는 경우 처리
+    if not projects:
+        st.warning("⚠️ 등록된 프로젝트가 없습니다. 프로젝트를 먼저 생성해 주세요.")
+        current_batch = "미지정"
     else:
-        current_batch = selected_batch
+        # 프로젝트 선택 드롭다운 생성 (2__Well_Plates.py 방식 적용)
+        proj_map = {
+            f"[{p['group_name'] if p['group_name'] else '기본'}] {p['name']} (ID: {p['id']})": p 
+            for p in projects
+        }
+        proj_options = list(proj_map.keys())
+
+        if (
+            "selected_plate_proj_label" not in st.session_state 
+            or st.session_state.selected_plate_proj_label not in proj_options
+        ):
+            st.session_state.selected_plate_proj_label = proj_options[0]
+
+        selected_proj_label = st.selectbox(
+            "📌 프로젝트 선택",
+            options=proj_options,
+            key="selected_plate_proj_label",
+        )
+        selected_proj = proj_map[selected_proj_label]
+
+        # 프로젝트 하위의 플레이트(배치) 목록 가져오기
+        plates = db.get_plates(selected_proj['id'])
+
+        if plates:
+            plate_dict = {
+                f"{pl['name']} ({pl['rows']}x{pl['cols']} Wells)": pl 
+                for pl in plates
+            }
+            selected_plate_name = st.selectbox(
+                "🧫 작업 대상 플레이트(배치) 선택",
+                options=list(plate_dict.keys()),
+                key="selected_plate_select",
+            )
+            selected_plate = plate_dict[selected_plate_name]
+            current_batch = selected_plate['name']
+        else:
+            st.info("💡 해당 프로젝트에 등록된 플레이트가 없습니다.")
+            current_batch = "플레이트 없음"
 
     st.divider()
 
-    # 2. 선택한 배치의 조건 설정 (필요 시 세부 선택)
+    # 2. 선택한 배치의 조건 설정
     st.subheader("📋 배치 시작 조건")
 
     cell_type = st.selectbox(
@@ -81,7 +99,7 @@ with st.sidebar:
     st.info(
         f"""
     **현재 선택된 배치 요약**
-    - **ID**: `{current_batch}`
+    - **ID / 플레이트**: `{current_batch}`
     - **종류**: {cell_type}
     - **단계**: {culture_stage}
     - **배지**: {media_condition}
