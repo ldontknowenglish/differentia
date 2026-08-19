@@ -15,20 +15,17 @@ db.init_db()
 db.init_analysis_tables()
 
 # ==========================================
-# 🧫 [사이드바] 배치(Batch) 선택 및 정보 설정
+# 🧫 [사이드바] 프로젝트 및 배치(Batch) 선택
 # ==========================================
 projects = db.get_projects()
 
 with st.sidebar:
     st.header("🧫 실험 배치(Batch) 선택")
 
-    # DB에 등록된 프로젝트가 없는 경우 처리
     if not projects:
         st.warning("⚠️ 등록된 프로젝트가 없습니다. 프로젝트를 먼저 생성해 주세요.")
         current_batch = "미지정"
-        sample_day = "Day 0"
     else:
-        # 프로젝트 선택
         proj_map = {
             f"[{p['group_name'] if p['group_name'] else '기본'}] {p['name']} (ID: {p['id']})": p
             for p in projects
@@ -48,7 +45,6 @@ with st.sidebar:
         )
         selected_proj = proj_map[selected_proj_label]
 
-        # 플레이트(배치) 선택
         plates = db.get_plates(selected_proj["id"])
 
         if plates:
@@ -67,37 +63,26 @@ with st.sidebar:
             st.info("💡 해당 프로젝트에 등록된 플레이트가 없습니다.")
             current_batch = "플레이트 없음"
 
-    st.divider()
-
-    # 샘플 시점(Day) 입력
-    st.subheader("📅 샘플 시점 설정")
-    sample_day = st.text_input(
-        "샘플 획득 시점 (Day/Timepoint)",
-        value="Day 7",
-        help="예: Day 0, Day 3, Day 14, Pass 2 등",
-    )
-
-    st.info(
-        f"""
-    **현재 선택 상태**
-    - **플레이트**: `{current_batch}`
-    - **샘플 시점**: `{sample_day}`
-    """
-    )
-
 
 # ==========================================
-# 📊 [메인 화면] 선택된 배치 기반 데이터 작업
+# 📊 [메인 화면] 1. 통합 메타데이터 입력 구역
 # ==========================================
 st.title("🔬 실험 데이터 입력 및 배치 분석")
 
-# 상단 현황 메트릭
-col_b1, col_b2, col_b3 = st.columns(3)
-col_b1.metric("선택된 배치 ID", current_batch)
-col_b2.metric("샘플 획득 시점", sample_day)
-col_b3.metric("오늘 날짜", datetime.date.today().strftime("%Y-%m-%d"))
+st.markdown("### 📋 공통 실험 메타데이터 (한번에 관리)")
+st.caption("배치 정보와 실험 날짜 관련 메타데이터를 통합하여 한곳에서 관리합니다.")
 
-st.caption(f"💡 데이터 입력 시 **[{current_batch}]** 배치와 **[{sample_day}]** 정보가 함께 기록됩니다.")
+with st.container(border=True):
+    col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+    with col_m1:
+        st.text_input("🧫 배치 ID (Batch)", value=current_batch, disabled=True)
+    with col_m2:
+        sample_day = st.text_input("📅 샘플 시점 (Timepoint)", value="Day 7", help="예: Day 0, Day 7, Pass 2 등")
+    with col_m3:
+        acq_date = st.date_input("📅 샘플 획득일", datetime.date.today(), key="global_acq_date")
+    with col_m4:
+        exp_date = st.date_input("🧪 실험 진행일", datetime.date.today(), key="global_exp_date")
+
 st.divider()
 
 
@@ -126,31 +111,21 @@ tab1, tab2, tab3, tab4 = st.tabs(["🧫 Cell Count", "🧬 qPCR", "📊 FACS", "
 
 
 # [개편된 레이아웃] 데이터 입력(좌) / 데이터 수정·삭제(우) UI 랜더링 함수
-def render_analysis_tab(assay_name, example_text):
-    st.subheader(f"{assay_name} 데이터 작업 ({current_batch} / {sample_day})")
+def render_analysis_tab(assay_name, example_text, is_cell_count=False):
+    st.subheader(f"{assay_name} 데이터 작업")
 
-    # 2개 컬럼 분할: [왼쪽] 데이터 입력 항목 몰아넣기 / [오른쪽] 신규 데이터 편집 및 삭제
     col_left, col_right = st.columns([1, 1.2])
 
     with col_left:
-        st.markdown("##### 📥 1. 데이터 입력 및 조건 설정")
+        st.markdown("##### 📥 1. 데이터 가져오기")
         
-        # 1. 날짜 지정
-        col_d1, col_d2 = st.columns(2)
-        with col_d1:
-            acq_date = st.date_input(f"📅 샘플 획득일", datetime.date.today(), key=f"acq_{assay_name}")
-        with col_d2:
-            exp_date = st.date_input(f"🧪 실험 진행일", datetime.date.today(), key=f"exp_{assay_name}")
-
-        # 2. 데이터 파일 업로드 또는 붙여넣기
         file_upload = st.file_uploader(
             f"엑셀/CSV 파일 업로드", type=["xlsx", "xls", "csv"], key=f"file_{assay_name}"
         )
         text_upload = st.text_area(
-            "엑셀/Prism 복사-붙여넣기", value=example_text, height=120, key=f"txt_{assay_name}"
+            "엑셀/Prism 복사-붙여넣기", value=example_text, height=140, key=f"txt_{assay_name}"
         )
 
-        # 3. 사진 및 첨부파일
         attachments = st.file_uploader(
             f"관련 사진/원시 데이터 첨부",
             accept_multiple_files=True,
@@ -159,23 +134,24 @@ def render_analysis_tab(assay_name, example_text):
         if attachments:
             st.caption(f"📎 총 {len(attachments)}개 파일 첨부됨")
 
-        # 입력 데이터 파싱
         df_parsed = parse_input_data(file_upload, text_upload)
 
     with col_right:
         st.markdown("##### ✏️ 2. 신규 데이터 검토 및 수정 / 삭제")
         
         if df_parsed is not None:
-            st.caption("💡 **수정/삭제**: 테이블 셀 값을 편집하거나, 삭제할 행 선택 후 `Del`키를 누르고 DB에 저장하세요.")
+            st.caption("💡 **수정/삭제**: 셀 값을 직접 수정하거나 행 선택 후 `Del`키로 삭제 후 DB에 저장하세요.")
 
             df_working = df_parsed.copy()
-            if "Batch_ID" not in df_working.columns:
-                df_working.insert(0, "Batch_ID", current_batch)
-                df_working.insert(1, "Timepoint", sample_day)
-                df_working.insert(2, "샘플획득일", acq_date.strftime("%Y-%m-%d"))
-                df_working.insert(3, "실험진행일", exp_date.strftime("%Y-%m-%d"))
 
-            # 오른쪽 화면에서 수정 및 삭제 가능한 Table Editor
+            # Cell Count인 경우 1차, 2차 수치 기반 평균 자동 계산
+            if is_cell_count:
+                if "Count_1st" in df_working.columns and "Count_2nd" in df_working.columns:
+                    df_working["Count_1st"] = pd.to_numeric(df_working["Count_1st"], errors="coerce")
+                    df_working["Count_2nd"] = pd.to_numeric(df_working["Count_2nd"], errors="coerce")
+                    df_working["Count_Mean"] = df_working[["Count_1st", "Count_2nd"]].mean(axis=1).round(3)
+
+            # 사용자 지정 폼 형태 그대로 편집기 표시 (불필요한 메타데이터 컬럼 미포함)
             edited_df = st.data_editor(
                 df_working, 
                 num_rows="dynamic", 
@@ -184,16 +160,17 @@ def render_analysis_tab(assay_name, example_text):
             )
 
             if st.button(f"💾 [{assay_name}] 데이터 DB 저장", key=f"btn_save_{assay_name}", type="primary"):
+                # 작성한 폼 형태 그대로 DB에 저장
                 db.save_analysis_data(current_batch, assay_name, edited_df)
-                st.success(f"[{current_batch}] 배치의 {assay_name} 데이터가 DB에 저장되었습니다!")
+                st.success(f"[{current_batch}] 배치의 {assay_name} 데이터가 성공적으로 저장되었습니다!")
         else:
-            st.info("👈 **왼쪽에서 엑셀 파일을 업로드하거나 텍스트를 입력하면**, 이곳에 수정 및 삭제가 가능한 데이터 편집 테이블이 표시됩니다.")
+            st.info("👈 왼쪽에서 데이터를 입력하거나 파일을 업로드하면, 이곳에 편집 테이블이 활성화됩니다.")
 
     st.divider()
 
-    # 4. DB 저장 이력 조회 및 수정/삭제 (하단 전체 배치)
-    st.markdown(f"#### 📜 [{current_batch}] DB 저장 데이터 이력 관리")
-    st.caption("💡 기존 DB에 등록된 데이터입니다. 테이블에서 직접 수정한 뒤 **'DB 변경사항 업데이트'** 버튼을 누르면 DB 반영됩니다.")
+    # 3. DB 저장 이력 조회 및 수정/삭제 (입력 폼과 동일한 구조 유지)
+    st.markdown(f"#### 📜 [{current_batch}] 저장된 데이터 이력 관리")
+    st.caption("💡 작성했던 데이터 폼 규격 그대로 저장된 이력입니다. 수정 후 아래 업데이트 버튼을 누르세요.")
     
     saved_df = db.get_analysis_data(current_batch, assay_name)
 
@@ -210,14 +187,15 @@ def render_analysis_tab(assay_name, example_text):
             st.success("데이터베이스가 성공적으로 업데이트되었습니다!")
             st.rerun()
     else:
-        st.caption(f"현재 선택된 배치에 저장된 {assay_name} 데이터가 없습니다.")
+        st.caption(f"현재 선택된 배치({current_batch})에 저장된 {assay_name} 데이터가 없습니다.")
 
 
-# --- 탭 1: Cell Count ---
+# --- 탭 1: Cell Count (1차, 2차, 평균 수치 관리 규격 적용) ---
 with tab1:
     render_analysis_tab(
         "Cell Count",
-        "Sample\tConcentration_M_mL\tViability_pct\nControl\t1.2\t95.4\nGroup_A\t2.5\t92.1\nGroup_B\t3.1\t88.7",
+        "Sample\tCount_1st\tCount_2nd\tViability_pct\nControl\t1.20\t1.24\t95.4\nGroup_A\t2.40\t2.60\t92.1\nGroup_B\t3.00\t3.20\t88.7",
+        is_cell_count=True
     )
 
 # --- 탭 2: qPCR ---
@@ -242,7 +220,6 @@ with tab4:
     st.subheader("📈 선택한 배치(플레이트) 간 비교 분석 및 종합 보고서")
     st.caption("여러 배치를 다중 선택하여 실험 데이터(Cell Count, qPCR, FACS)를 비교 시각화합니다.")
 
-    # 전체 배치(플레이트) 목록 추출
     all_plates = []
     for proj in projects:
         p_list = db.get_plates(proj["id"])
@@ -253,7 +230,6 @@ with tab4:
     if not all_plates:
         st.warning("등록된 배치(플레이트) 데이터가 없습니다.")
     else:
-        # 다중 배치 선택 드롭다운
         default_selected = [current_batch] if current_batch in all_plates else [all_plates[0]]
         selected_batches = st.multiselect(
             "🔍 비교 분석할 배치(플레이트) 들을 선택하세요:",
@@ -267,13 +243,14 @@ with tab4:
         else:
             st.divider()
 
-            # 선택된 배치들의 데이터 통합 로딩 함수
             def get_combined_data(assay_name):
                 combined_list = []
                 for b_id in selected_batches:
                     df = db.get_analysis_data(b_id, assay_name)
                     if not df.empty:
-                        combined_list.append(df)
+                        df_copy = df.copy()
+                        df_copy.insert(0, "Batch_ID", b_id)
+                        combined_list.append(df_copy)
                 if combined_list:
                     return pd.concat(combined_list, ignore_index=True)
                 return pd.DataFrame()
@@ -286,16 +263,19 @@ with tab4:
                 col_cc_graph, col_cc_table = st.columns([3, 2])
                 
                 with col_cc_graph:
-                    if "Concentration_M_mL" in cc_combined.columns:
-                        cc_combined["Concentration_M_mL"] = pd.to_numeric(cc_combined["Concentration_M_mL"], errors="coerce")
+                    # 평균값(Count_Mean) 우선 시각화
+                    target_col = "Count_Mean" if "Count_Mean" in cc_combined.columns else "Count_1st"
+                    
+                    if target_col in cc_combined.columns:
+                        cc_combined[target_col] = pd.to_numeric(cc_combined[target_col], errors="coerce")
                         
                         fig_cc = px.bar(
                             cc_combined,
                             x="Sample" if "Sample" in cc_combined.columns else cc_combined.index,
-                            y="Concentration_M_mL",
+                            y=target_col,
                             color="Batch_ID",
                             barmode="group",
-                            title="배치별 세포 농도 비교 (Concentration M/mL)",
+                            title=f"배치별 세포 농도/수치 비교 ({target_col})",
                             text_auto=True,
                         )
                         st.plotly_chart(fig_cc, use_container_width=True)
