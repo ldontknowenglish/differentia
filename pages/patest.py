@@ -1,131 +1,525 @@
-import io
 import pandas as pd
-import plotly.express as px
 import streamlit as st
 
-st.set_page_config(page_title="실험 데이터 관리", layout="wide")
+import db
+import style
 
-# ==========================================
-# 🧫 [사이드바] 배치(Batch) 선택 및 정보 설정
-# ==========================================
-with st.sidebar:
-    st.header("🧫 실험 배치(Batch) 선택")
+# --- 1. 페이지 설정 및 디자인 서식 적용 ---
+st.set_page_config(
+    page_title="연구 프로젝트 관리", page_icon="🧪", layout="wide"
+)
 
-    # 세션 상태에 기본 배치 목록 저장
-    if "batch_list" not in st.session_state:
-        st.session_state["batch_list"] = [
-            "Batch_20260819_01",
-            "Batch_20260815_02",
-            "Batch_20260801_03",
-        ]
+# 화면 전체 레이아웃을 좌측 밀착(Left-aligned)시키는 Custom CSS
+st.markdown(
+    """
+    <style>
+        .main .block-container {
+            padding-left: 1.5rem !important;
+            padding-right: 2rem !important;
+            max-width: 100% !important;
+            margin-left: 0 !important;
+        }
+    </style>
+""",
+    unsafe_allow_html=True,
+)
 
-    # 1. 배치 ID 선택 (새 배치 추가 옵션 포함)
-    selected_batch = st.selectbox(
-        "작업할 배치(Batch ID)를 선택하세요",
-        options=st.session_state["batch_list"] + ["➕ 새 배치 직접 등록"],
+if hasattr(style, "apply_custom_style"):
+    style.apply_custom_style()
+
+st.title("🧪 Experiment project")
+st.caption(
+    "새 연구 프로젝트를 생성하고 그룹별로 분류/검색하며, Plate 및 Well별 처리 흐름을 상세 조회합니다."
+)
+
+# DB 초기화 및 데이터 로드
+db.init_db()
+projects = db.get_projects()
+
+# --- 2. Session State 초기화 ---
+if "group_options" not in st.session_state:
+    existing_groups = sorted(
+        list(set([p["group_name"] for p in projects if p.get("group_name")]))
+    )
+    default_groups = ["기본 연구"]
+    st.session_state.group_options = list(
+        dict.fromkeys(default_groups + existing_groups)
     )
 
-    # 1-1. 새 배치 등록 로직
-    if selected_batch == "➕ 새 배치 직접 등록":
-        new_batch_id = st.text_input(
-            "새 배치 ID 입력", placeholder="예: Batch_20260820_01"
+if "name_presets" not in st.session_state:
+    st.session_state.name_presets = ["분화"]
+
+# 현재 선택된 프로젝트 ID 초기화
+if "selected_project_id" not in st.session_state and projects:
+    st.session_state.selected_project_id = projects[0]["id"]
+
+# =========================================================
+# 사이드바: 1) 활성 배치(Batch) 선택 & 2) 새 프로젝트 생성
+# =========================================================
+with st.sidebar:
+    # -----------------------------------------------------
+    # [섹션 1] 현재 선택된 프로젝트의 배치(Batch / Plate) 선택
+    # -----------------------------------------------------
+    st.header("🧫 활성 실험 배치(Batch)")
+
+    if projects and "selected_project_id" in st.session_state:
+        # DB에서 현재 프로젝트의 Plate/Batch 목록을 가져옵니다.
+        current_proj_id = st.session_state.selected_project_id
+        db_plates = db.get_plates(current_proj_id)
+
+        # Plate 목록을 Batch 라벨로 사용 (DB에 Plate가 없을 경우 기본 배치명 생성)
+        if db_plates:
+            batch_options = [p["name"] for p in db_plates]
+        else:
+            batch_options = ["기본 배치 (Batch_01)"]
+
+        selected_batch_name = st.selectbox(
+            "📍 작업할 배치(Plate) 선택",
+            options=batch_options + ["➕ 새 배치 직접 입력"],
+            key="sb_batch_selector",
         )
-        if st.button("배치 추가"):
-            if (
-                new_batch_id
-                and new_batch_id not in st.session_state["batch_list"]
-            ):
-                st.session_state["batch_list"].append(new_batch_id)
-                st.success(f"'{new_batch_id}' 등록 완료!")
-                st.rerun()
-        current_batch = new_batch_id if new_batch_id else "미지정"
+
+        if selected_batch_name == "➕ 새 배치 직접 입력":
+            custom_batch = st.text_input(
+                "새 배치명 입력", placeholder="예: Batch_20260819_01"
+            )
+            active_batch = custom_batch if custom_batch else "미지정 배치"
+        else:
+            active_batch = selected_batch_name
+
+        # 배양 / 세포 메타 정보 입력
+        cell_type = st.selectbox(
+            "세포 / 오가노이드 종류",
+            [
+                "Blood Vessel Organoid",
+                "Intestinal Assembloid",
+                "iPSC-derived Line",
+                "Primary Cell Line",
+            ],
+            key="sb_cell_type",
+        )
+
+        media_condition = st.selectbox(
+            "배지 조건 (Media Condition)",
+            [
+                "Chemically Defined (Animal-Free)",
+                "Growth Factor High",
+                "Standard Medium",
+            ],
+            key="sb_media_condition",
+        )
+
+        # 선택된 배치 정보를 session_state에 저장하여 다른 탭/페이지에서 참조 가능하도록 함
+        st.session_state["current_batch_info"] = {
+            "project_id": current_proj_id,
+            "batch_name": active_batch,
+            "cell_type": cell_type,
+            "media_condition": media_condition,
+        }
+
+        st.info(
+            f"""
+        **현재 선택된 배치 요약**
+        - **배치명**: `{active_batch}`
+        - **세포**: {cell_type}
+        - **배지**: {media_condition}
+        """
+        )
     else:
-        current_batch = selected_batch
+        st.caption("등록된 프로젝트가 없습니다.")
 
     st.divider()
 
-    # 2. 선택한 배치의 조건 설정 (필요 시 세부 선택)
-    st.subheader("📋 배치 시작 조건")
+    # -----------------------------------------------------
+    # [섹션 2] 새 프로젝트 생성 & 드롭다운 관리
+    # -----------------------------------------------------
+    st.header("➕ 새 프로젝트")
 
-    cell_type = st.selectbox(
-        "세포 / 오가노이드 종류",
-        [
-            "Blood Vessel Organoid",
-            "Intestinal Assembloid",
-            "iPSC-derived Line",
-            "Primary Cell Line",
-        ],
+    # 1) 카테고리 / 그룹 선택
+    group_select_list = st.session_state.group_options + ["➕ 직접 입력"]
+    selected_group_opt = st.selectbox(
+        "📁 그룹 / 카테고리 선택", group_select_list
+    )
+    group_init_val = (
+        "" if selected_group_opt == "➕ 직접 입력" else selected_group_opt
+    )
+    p_group = st.text_input(
+        "카테고리 명칭 (필요시 수정 가능)",
+        value=group_init_val,
+        placeholder="예: 장 상피 모델",
     )
 
-    culture_stage = st.text_input("배양/분화 단계", value="Day 0 (Seeding)")
-
-    media_condition = st.selectbox(
-        "배지 조건 (Media Condition)",
-        [
-            "Chemically Defined (Animal-Free)",
-            "Growth Factor High",
-            "Standard Medium",
-        ],
+    # 2) 프로젝트명 선택
+    name_select_list = st.session_state.name_presets + ["➕ 직접 입력"]
+    selected_name_opt = st.selectbox("🧪 프로젝트명 선택", name_select_list)
+    name_init_val = (
+        "" if selected_name_opt == "➕ 직접 입력" else selected_name_opt
+    )
+    p_name = st.text_input(
+        "프로젝트명 (필요시 수정 가능)*",
+        value=name_init_val,
+        placeholder="예: HIO-Vessel Co-culture",
     )
 
-    # 선택 요약 정보 표시
-    st.info(
-        f"""
-    **현재 선택된 배치 요약**
-    - **ID**: `{current_batch}`
-    - **종류**: {cell_type}
-    - **단계**: {culture_stage}
-    - **배지**: {media_condition}
-    """
+    # 3) 드롭다운 항목 관리 (삭제)
+    with st.expander("⚙️ 드롭다운 항목 삭제/관리"):
+        del_target = st.radio(
+            "삭제할 드롭다운 항목 종류",
+            ["카테고리 항목", "프로젝트명 프리셋"],
+            horizontal=True,
+        )
+        if del_target == "카테고리 항목":
+            if st.session_state.group_options:
+                item_to_del = st.selectbox(
+                    "삭제할 카테고리 선택",
+                    st.session_state.group_options,
+                    key="del_cat_sb",
+                )
+                if st.button(
+                    "🗑️ 선택한 카테고리 항목 삭제", use_container_width=True
+                ):
+                    st.session_state.group_options.remove(item_to_del)
+                    st.toast(f"'{item_to_del}' 항목이 삭제되었습니다.")
+                    st.rerun()
+            else:
+                st.caption("삭제할 카테고리 항목이 없습니다.")
+        else:
+            if st.session_state.name_presets:
+                item_to_del = st.selectbox(
+                    "삭제할 프로젝트명 선택",
+                    st.session_state.name_presets,
+                    key="del_name_sb",
+                )
+                if st.button(
+                    "🗑️ 선택한 프로젝트명 항목 삭제", use_container_width=True
+                ):
+                    st.session_state.name_presets.remove(item_to_del)
+                    st.toast(f"'{item_to_del}' 항목이 삭제되었습니다.")
+                    st.rerun()
+            else:
+                st.caption("삭제할 프로젝트명 항목이 없습니다.")
+
+    st.divider()
+
+    # 4) 색상 프리셋 시각화
+    color_map = {
+        "#3B82F6": "🔵 파랑",
+        "#10B981": "🟢 초록",
+        "#F59E0B": "🟠 주황",
+        "#EF4444": "🔴 빨강",
+        "#8B5CF6": "🟣 보라",
+        "#EC4899": "🩷 핑크",
+        "#6B7280": "🔘 회색",
+    }
+
+    selected_preset = st.radio(
+        "🎨 색상 프리셋 선택",
+        options=list(color_map.keys()),
+        format_func=lambda c: color_map[c],
+        horizontal=True,
+        index=0,
     )
 
+    p_color = st.color_picker("색상 커스텀 지정", value=selected_preset)
+    p_desc = st.text_area("설명", placeholder="프로젝트 목적 및 실험 조건 작성")
 
-# ==========================================
-# 📊 [메인 화면] 선택된 배치 기반 데이터 작업
-# ==========================================
-st.title("🔬 실험 데이터 입력 및 분석")
+    if st.button("프로젝트 생성", use_container_width=True, type="primary"):
+        if p_name.strip():
+            final_group = p_group.strip() if p_group.strip() else "기본 연구"
+            final_name = p_name.strip()
 
-# 상단에 현재 배치 상태 표시 카드
-col_b1, col_b2, col_b3 = st.columns(3)
-col_b1.metric("선택된 배치 ID", current_batch)
-col_b2.metric("세포/오가노이드", cell_type)
-col_b3.metric("배양 단계", culture_stage)
+            if final_group not in st.session_state.group_options:
+                st.session_state.group_options.append(final_group)
+            if final_name not in st.session_state.name_presets:
+                st.session_state.name_presets.append(final_name)
 
-st.caption(f"💡 현재 입력하는 데이터는 **[{current_batch}]** 배치에 자동으로 귀속됩니다.")
+            db.add_project(final_name, final_group, p_color, p_desc.strip())
+            st.success(f"'{final_name}' 프로젝트가 생성되었습니다.")
+            st.rerun()
+        else:
+            st.error("프로젝트명을 입력하거나 선택해 주세요.")
 
-st.divider()
+# =========================================================
+# 메인 영역: 좌/우 화면 분할
+# =========================================================
+if not projects:
+    st.info("왼쪽 사이드바에서 프로젝트를 먼저 생성해 주세요.")
+    st.stop()
 
+groups = sorted({p["group_name"] for p in projects if p["group_name"]})
 
-# 파싱 함수
-def parse_pasted_data(raw_text):
-    if not raw_text.strip():
-        return None
-    try:
-        return pd.read_csv(io.StringIO(raw_text), sep="\t")
-    except Exception as e:
-        st.error(f"파싱 오류: {e}")
-        return None
+col_left, col_right = st.columns([1, 2.5], gap="large")
 
+# ---------------------------------------------------------
+# [좌측 영역] 검색, 필터 및 프로젝트 카드 목록
+# ---------------------------------------------------------
+with col_left:
+    st.subheader("📁 프로젝트 선택")
 
-# 데이터 입력 탭 (Cell Count / qPCR / FACS)
-tab1, tab2, tab3 = st.tabs(["🧫 Cell Count", "🧬 qPCR", "📊 FACS"])
+    selected_group = st.selectbox("📁 그룹 필터", ["전체"] + groups)
+    search_kw = st.text_input("🔍 검색", placeholder="프로젝트명 / 설명 입력")
 
-with tab1:
-    st.subheader(f"Cell Count 데이터 입력 ({current_batch})")
+    filtered = []
+    for p in projects:
+        if selected_group != "전체" and p["group_name"] != selected_group:
+            continue
+        if search_kw.strip():
+            kw = search_kw.strip().lower()
+            if (
+                kw not in (p["name"] or "").lower()
+                and kw not in (p["description"] or "").lower()
+            ):
+                continue
+        filtered.append(p)
 
-    example_cell = "Sample\tConcentration_M_mL\tViability_pct\nControl\t1.2\t95.4\nGroup_A\t2.5\t92.1\nGroup_B\t3.1\t88.7"
-    raw_cell = st.text_area(
-        "엑셀/Prism 데이터 붙여넣기", value=example_cell, height=120
-    )
-    df_cell = parse_pasted_data(raw_cell)
+    if not filtered:
+        st.warning("일치하는 프로젝트가 없습니다.")
+    else:
+        st.caption(f"💡 총 {len(filtered)}개의 프로젝트")
 
-    if df_cell is not None:
-        # 데이터프레임 맨 앞에 배치 ID 칼럼 자동 추가
-        df_cell.insert(0, "Batch_ID", current_batch)
+        if (
+            "selected_project_id" not in st.session_state
+            or st.session_state.selected_project_id
+            not in [p["id"] for p in filtered]
+        ):
+            st.session_state.selected_project_id = filtered[0]["id"]
 
-        edited_cell = st.data_editor(df_cell, num_rows="dynamic")
+        for p in filtered:
+            is_selected = p["id"] == st.session_state.selected_project_id
+            with st.container(border=True):
+                border_style = f"border-left: 5px solid {p['color_code']};"
+                st.markdown(
+                    f"""
+                    <div style="{border_style} padding-left: 8px; margin-bottom: 6px;">
+                        <div style="display:flex; align-items:center; justify-content:space-between;">
+                            <span style="font-size:15px; font-weight:bold; color:#0f172a;">{p['name']}</span>
+                            <span style="background-color:{p['color_code']}; padding:2px 7px; border-radius:10px; color:#fff; font-size:10px; font-weight:bold;">
+                                {p['group_name'] or '기본'}
+                            </span>
+                        </div>
+                        <div style="font-size:12px; color:#64748b; margin-top:4px;">{p['description'] or '설명 없음'}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
-        if st.button("💾 이 배치의 데이터 DB 저장", key="save_cell"):
-            st.success(
-                f"[{current_batch}] 배치의 Cell Count 데이터가 성공적으로 저장되었습니다!"
-            )
+                btn_label = "✅ 현재 선택됨" if is_selected else "📌 상세 보기"
+                if st.button(
+                    btn_label,
+                    key=f"btn_select_{p['id']}",
+                    use_container_width=True,
+                    disabled=is_selected,
+                ):
+                    st.session_state.selected_project_id = p["id"]
+                    st.rerun()
+
+# ---------------------------------------------------------
+# [우측 영역] 선택된 프로젝트의 상세 정보 & 활성 배치 연동
+# ---------------------------------------------------------
+with col_right:
+    if filtered:
+        proj = next(
+            p for p in filtered if p["id"] == st.session_state.selected_project_id
+        )
+
+        st.subheader(
+            f"📊 [{proj['group_name'] or '기본'}] {proj['name']} 실험 요약"
+        )
+
+        # 사이드바에서 설정한 활성 배치 정보 가져오기
+        current_batch_data = st.session_state.get(
+            "current_batch_info",
+            {
+                "batch_name": "미지정",
+                "cell_type": "-",
+                "media_condition": "-",
+            },
+        )
+
+        # 1) Metrics 카드 (활성 배치 및 DB 통계 수치)
+        plates = db.get_plates(proj["id"])
+        treatments = db.get_treatments_by_project(proj["id"])
+        logs = db.get_daily_logs(proj["id"])
+
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("선택된 활성 배치", current_batch_data["batch_name"])
+        m2.metric("등록 Plate 수", f"{len(plates)}개")
+        m3.metric("총 처리 기록", f"{len(treatments)}건")
+        m4.metric(
+            "실험 기록일",
+            f"{len(set([t['treatment_date'] for t in treatments] + [l['log_date'] for l in logs]))}일",
+        )
+
+        st.write("")
+
+        # 2) 탭 메뉴
+        tab1, tab2, tab3 = st.tabs(
+            ["🧫 Well별 한눈에 보기", "🕒 물질 처리 흐름", "⚙️ 프로젝트 수정/삭제"]
+        )
+
+        # Tab 1: Well별 한눈에 보기
+        with tab1:
+            if not plates:
+                st.info("등록된 Plate가 없습니다.")
+            else:
+                for plate in plates:
+                    pt = [
+                        t for t in treatments if t["plate_id"] == plate["id"]
+                    ]
+                    with st.container(border=True):
+                        st.markdown(
+                            f"**🧫 {plate['name']}** · {plate['rows']}×{plate['cols']} · 총 처리 {len(pt)}건"
+                        )
+                        if not pt:
+                            st.caption(
+                                "이 Plate에는 등록된 처리 기록이 없습니다."
+                            )
+                            continue
+
+                        grouped = {}
+                        for t in pt:
+                            grouped.setdefault(t["well_position"], []).append(t)
+
+                        rows = []
+                        for well, items in sorted(grouped.items()):
+                            items = sorted(
+                                items, key=lambda x: x["treatment_date"]
+                            )
+                            flow = " → ".join(
+                                f"{x['treatment_date'][5:]} {x['compound_name']}"
+                                + (
+                                    f" ({x['concentration']})"
+                                    if x["concentration"]
+                                    else ""
+                                )
+                                for x in items
+                            )
+                            last = items[-1]
+                            rows.append(
+                                {
+                                    "Well": well,
+                                    "처리 횟수": len(items),
+                                    "첫 처리일": items[0]["treatment_date"],
+                                    "최근 처리일": last["treatment_date"],
+                                    "처리 흐름": flow,
+                                    "세포/오가노이드": last["cell_info"] or "-",
+                                }
+                            )
+                        st.dataframe(
+                            pd.DataFrame(rows),
+                            hide_index=True,
+                            use_container_width=True,
+                        )
+
+        # Tab 2: 물질 처리 흐름
+        with tab2:
+            st.subheader("🗓️ 날짜순 실험 흐름")
+            if not treatments and not logs:
+                st.info("아직 기록된 실험 내역이 없습니다.")
+            else:
+                items = []
+                for t in treatments:
+                    items.append({
+                        "date": str(t["treatment_date"]),
+                        "type": "🧪 물질",
+                        "plate": t["plate_name"],
+                        "well": t["well_position"],
+                        "detail": t["compound_name"],
+                        "condition": t["concentration"] or "",
+                        "note": t["note"] or "",
+                    })
+                for l in logs:
+                    items.append({
+                        "date": str(l["log_date"]),
+                        "type": "📝 Daily Log",
+                        "plate": "",
+                        "well": "",
+                        "detail": l["content"],
+                        "condition": "",
+                        "note": "",
+                    })
+
+                df = pd.DataFrame(items)
+                df["date_dt"] = pd.to_datetime(df["date"], errors="coerce")
+                df = df.sort_values(
+                    ["date_dt", "plate", "well", "detail"],
+                    ascending=[True, True, True, True],
+                )
+
+                for d, group in df.groupby("date", sort=True):
+                    st.markdown(f"#### 📅 {d}")
+                    for _, r in group.iterrows():
+                        if r["type"] == "🧪 물질":
+                            loc = f"{r['plate']} · {r['well']}"
+                            cond = (
+                                f" ({r['condition']})" if r["condition"] else ""
+                            )
+                            note = f" - {r['note']}" if r["note"] else ""
+                            st.markdown(
+                                f"""
+                                <div style="margin:4px 0; padding:8px 12px; border-left:4px solid #3b82f6; background:#f8fafc; font-size:13px; border-radius:4px;">
+                                    <b>🧪 {r['detail']}</b>{cond}<br>
+                                    <span style="color:#64748b;">위치: {loc}{note}</span>
+                                </div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
+                        else:
+                            st.markdown(
+                                f"""
+                                <div style="margin:4px 0; padding:8px 12px; border-left:4px solid #10b981; background:#f8fafc; font-size:13px; border-radius:4px;">
+                                    <b>📝 Daily Log:</b> {r['detail']}
+                                </div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
+
+        # Tab 3: 프로젝트 수정 및 삭제
+        with tab3:
+            with st.container(border=True):
+                st.subheader("⚙️ 프로젝트 정보 수정")
+                edit_name = st.text_input(
+                    "프로젝트명",
+                    value=proj["name"],
+                    key="edit_name_compact",
+                )
+                edit_group = st.text_input(
+                    "그룹명",
+                    value=proj["group_name"],
+                    key="edit_group_compact",
+                )
+                edit_color = st.color_picker(
+                    "색상",
+                    value=proj["color_code"],
+                    key="edit_color_compact",
+                )
+                edit_desc = st.text_area(
+                    "설명",
+                    value=proj["description"] or "",
+                    key="edit_desc_compact",
+                )
+
+                col_btn1, col_btn2 = st.columns(2)
+                if col_btn1.button(
+                    "💾 변경사항 저장",
+                    use_container_width=True,
+                    type="primary",
+                ):
+                    db.update_project(
+                        proj["id"],
+                        edit_name,
+                        edit_group,
+                        edit_color,
+                        edit_desc,
+                    )
+                    st.success("프로젝트 정보가 수정되었습니다.")
+                    st.rerun()
+                if col_btn2.button(
+                    "🗑️ 휴지통으로 이동", use_container_width=True
+                ):
+                    db.delete_project(proj["id"])
+                    st.session_state.pop("selected_project_id", None)
+                    st.toast(
+                        "프로젝트가 휴지통으로 이동되었습니다.", icon="🗑️"
+                    )
+                    st.rerun()
