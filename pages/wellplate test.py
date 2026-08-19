@@ -302,11 +302,10 @@ else:
     if selected_plate:
         treatments = db.get_treatments_by_plate(selected_plate['id'])
         
-        # 4개 탭 구성 (사진 비교 탭 포함)
+        # 3개 탭 구성 (사진 비교 탭 포함)
         tab_view, tab_tree, tab_treat, tab_compare = st.tabs([
             "🔴 Well Plate 시각화 & 편집", 
             "🌳 사용자 데이터 기반 계통도", 
-            "📝 날짜별 물질/세포 처리 입력 및 전체 관리",
             "📸 날짜별 & 조건별 사진 비교 시각화"
         ])
 
