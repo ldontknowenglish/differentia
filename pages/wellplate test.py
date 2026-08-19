@@ -276,8 +276,8 @@ else:
         else:
             st.info("💡 선택된 프로젝트에 등록된 플레이트가 없습니다. 아래에서 생성해 주세요.")
             selected_plate = None
-            
-   st.markdown("---")
+
+        st.markdown("---")
         with st.expander("➕ 새 규격 플레이트 생성", expanded=not bool(plates)):
             with st.form("add_plate_form", clear_on_submit=True):
                 plate_name = st.text_input("플레이트 이름*", placeholder="예: 96-Well Plate #1")
@@ -298,10 +298,11 @@ else:
                         st.rerun()
                     else:
                         st.error("플레이트 이름을 입력해 주세요.")
+
     if selected_plate:
         treatments = db.get_treatments_by_plate(selected_plate['id'])
         
-        # 3개 탭 구성 (사진 비교 탭 포함)
+        # 4개 탭 구성 (사진 비교 탭 포함)
         tab_view, tab_tree, tab_compare = st.tabs([
             "🔴 Well Plate 시각화 & 편집", 
             "🌳 사용자 데이터 기반 계통도", 
