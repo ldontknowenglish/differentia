@@ -125,65 +125,75 @@ def parse_input_data(uploaded_file, raw_text):
 tab1, tab2, tab3, tab4 = st.tabs(["🧫 Cell Count", "🧬 qPCR", "📊 FACS", "📈 배치 간 비교 분석 및 종합 보고서"])
 
 
-# 데이터 입력 및 DB 이력 수정/삭제 공통 UI 함수
+# [개편된 레이아웃] 데이터 입력(좌) / 데이터 수정·삭제(우) UI 랜더링 함수
 def render_analysis_tab(assay_name, example_text):
-    st.subheader(f"{assay_name} 데이터 입력 ({current_batch} / {sample_day})")
+    st.subheader(f"{assay_name} 데이터 작업 ({current_batch} / {sample_day})")
 
-    # 1. 날짜 설정 (샘플 획득일 vs 실험 진행일)
-    col_d1, col_d2 = st.columns(2)
-    with col_d1:
-        acq_date = st.date_input(f"📅 샘플 획득일 ({assay_name})", datetime.date.today(), key=f"acq_{assay_name}")
-    with col_d2:
-        exp_date = st.date_input(f"🧪 실험 진행일 ({assay_name})", datetime.date.today(), key=f"exp_{assay_name}")
+    # 2개 컬럼 분할: [왼쪽] 데이터 입력 항목 몰아넣기 / [오른쪽] 신규 데이터 편집 및 삭제
+    col_left, col_right = st.columns([1, 1.2])
 
-    # 2. 파일 업로드 및 붙여넣기 선택
-    st.markdown("##### 📥 데이터 가져오기 (엑셀 Upload 또는 텍스트 붙여넣기)")
-    col_in1, col_in2 = st.columns([1, 1])
+    with col_left:
+        st.markdown("##### 📥 1. 데이터 입력 및 조건 설정")
+        
+        # 1. 날짜 지정
+        col_d1, col_d2 = st.columns(2)
+        with col_d1:
+            acq_date = st.date_input(f"📅 샘플 획득일", datetime.date.today(), key=f"acq_{assay_name}")
+        with col_d2:
+            exp_date = st.date_input(f"🧪 실험 진행일", datetime.date.today(), key=f"exp_{assay_name}")
 
-    with col_in1:
+        # 2. 데이터 파일 업로드 또는 붙여넣기
         file_upload = st.file_uploader(
-            f"엑셀/CSV 파일 업로드 ({assay_name})", type=["xlsx", "xls", "csv"], key=f"file_{assay_name}"
+            f"엑셀/CSV 파일 업로드", type=["xlsx", "xls", "csv"], key=f"file_{assay_name}"
         )
-    with col_in2:
         text_upload = st.text_area(
-            "엑셀/Prism 복사-붙여넣기", value=example_text, height=100, key=f"txt_{assay_name}"
+            "엑셀/Prism 복사-붙여넣기", value=example_text, height=120, key=f"txt_{assay_name}"
         )
 
-    df_parsed = parse_input_data(file_upload, text_upload)
+        # 3. 사진 및 첨부파일
+        attachments = st.file_uploader(
+            f"관련 사진/원시 데이터 첨부",
+            accept_multiple_files=True,
+            key=f"attach_{assay_name}",
+        )
+        if attachments:
+            st.caption(f"📎 총 {len(attachments)}개 파일 첨부됨")
 
-    # 3. 사진 및 이미지/파일 첨부
-    st.markdown("##### 📎 증빙 사진 및 원본 파일 첨부")
-    attachments = st.file_uploader(
-        f"관련 사진/원시 데이터 파일 첨부 ({assay_name})",
-        accept_multiple_files=True,
-        key=f"attach_{assay_name}",
-    )
-    if attachments:
-        st.caption(f"총 {len(attachments)}개 파일 첨부됨")
+        # 입력 데이터 파싱
+        df_parsed = parse_input_data(file_upload, text_upload)
 
-    # 4. 신규 데이터 검토 및 저장
-    if df_parsed is not None:
-        st.markdown("##### ✏️ 신규 키 데이터 검토 및 수정/삭제")
-        st.caption("테이블 셀을 클릭하여 직접 수정하거나, 행을 선택하여 삭제(Del) 후 DB에 저장하세요.")
+    with col_right:
+        st.markdown("##### ✏️ 2. 신규 데이터 검토 및 수정 / 삭제")
+        
+        if df_parsed is not None:
+            st.caption("💡 **수정/삭제**: 테이블 셀 값을 편집하거나, 삭제할 행 선택 후 `Del`키를 누르고 DB에 저장하세요.")
 
-        df_working = df_parsed.copy()
-        if "Batch_ID" not in df_working.columns:
-            df_working.insert(0, "Batch_ID", current_batch)
-            df_working.insert(1, "Timepoint", sample_day)
-            df_working.insert(2, "샘플획득일", acq_date.strftime("%Y-%m-%d"))
-            df_working.insert(3, "실험진행일", exp_date.strftime("%Y-%m-%d"))
+            df_working = df_parsed.copy()
+            if "Batch_ID" not in df_working.columns:
+                df_working.insert(0, "Batch_ID", current_batch)
+                df_working.insert(1, "Timepoint", sample_day)
+                df_working.insert(2, "샘플획득일", acq_date.strftime("%Y-%m-%d"))
+                df_working.insert(3, "실험진행일", exp_date.strftime("%Y-%m-%d"))
 
-        edited_df = st.data_editor(df_working, num_rows="dynamic", key=f"edit_{assay_name}")
+            # 오른쪽 화면에서 수정 및 삭제 가능한 Table Editor
+            edited_df = st.data_editor(
+                df_working, 
+                num_rows="dynamic", 
+                key=f"edit_{assay_name}",
+                use_container_width=True
+            )
 
-        if st.button(f"💾 [{assay_name}] 데이터 DB 저장", key=f"btn_save_{assay_name}"):
-            db.save_analysis_data(current_batch, assay_name, edited_df)
-            st.success(f"[{current_batch}] 배치의 {assay_name} 데이터가 DB에 저장되었습니다!")
+            if st.button(f"💾 [{assay_name}] 데이터 DB 저장", key=f"btn_save_{assay_name}", type="primary"):
+                db.save_analysis_data(current_batch, assay_name, edited_df)
+                st.success(f"[{current_batch}] 배치의 {assay_name} 데이터가 DB에 저장되었습니다!")
+        else:
+            st.info("👈 **왼쪽에서 엑셀 파일을 업로드하거나 텍스트를 입력하면**, 이곳에 수정 및 삭제가 가능한 데이터 편집 테이블이 표시됩니다.")
 
     st.divider()
 
-    # 5. DB 저장 이력 조회, 수정 및 삭제
-    st.markdown(f"#### 📜 [{current_batch}] DB 저장 데이터 관리 (수정 / 삭제)")
-    st.caption("💡 **수정/삭제 방법**: 아래 테이블에서 값을 직접 편집하거나 삭제할 행을 클릭(Del 키)한 후 하단의 **'DB 변경사항 업데이트'** 버튼을 누르세요.")
+    # 4. DB 저장 이력 조회 및 수정/삭제 (하단 전체 배치)
+    st.markdown(f"#### 📜 [{current_batch}] DB 저장 데이터 이력 관리")
+    st.caption("💡 기존 DB에 등록된 데이터입니다. 테이블에서 직접 수정한 뒤 **'DB 변경사항 업데이트'** 버튼을 누르면 DB 반영됩니다.")
     
     saved_df = db.get_analysis_data(current_batch, assay_name)
 
@@ -195,14 +205,12 @@ def render_analysis_tab(assay_name, example_text):
             use_container_width=True,
         )
         
-        col_act1, col_act2 = st.columns([1, 4])
-        with col_act1:
-            if st.button(f"🔄 [{assay_name}] DB 변경사항 업데이트", key=f"btn_update_{assay_name}"):
-                db.save_analysis_data(current_batch, assay_name, updated_db_df)
-                st.success("데이터베이스가 성공적으로 업데이트되었습니다!")
-                st.rerun()
+        if st.button(f"🔄 [{assay_name}] DB 변경사항 업데이트", key=f"btn_update_{assay_name}"):
+            db.save_analysis_data(current_batch, assay_name, updated_db_df)
+            st.success("데이터베이스가 성공적으로 업데이트되었습니다!")
+            st.rerun()
     else:
-        st.caption(f"저장된 {assay_name} 데이터가 없습니다.")
+        st.caption(f"현재 선택된 배치에 저장된 {assay_name} 데이터가 없습니다.")
 
 
 # --- 탭 1: Cell Count ---
@@ -278,7 +286,6 @@ with tab4:
                 col_cc_graph, col_cc_table = st.columns([3, 2])
                 
                 with col_cc_graph:
-                    # 수치형 변환
                     if "Concentration_M_mL" in cc_combined.columns:
                         cc_combined["Concentration_M_mL"] = pd.to_numeric(cc_combined["Concentration_M_mL"], errors="coerce")
                         
