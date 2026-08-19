@@ -77,8 +77,6 @@ with st.sidebar:
     **현재 선택된 배치 요약**
     - **ID / 플레이트**: `{current_batch}`
     - **종류**: {cell_type}
-    - **단계**: {culture_stage}
-    - **배지**: {media_condition}
     """
     )
 
@@ -92,7 +90,6 @@ st.title("🔬 실험 데이터 입력 및 분석")
 col_b1, col_b2, col_b3 = st.columns(3)
 col_b1.metric("선택된 배치 ID", current_batch)
 col_b2.metric("세포/오가노이드", cell_type)
-col_b3.metric("배양 단계", culture_stage)
 
 st.caption(f"💡 현재 입력하는 데이터는 **[{current_batch}]** 배치에 자동으로 귀속됩니다.")
 
