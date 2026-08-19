@@ -874,128 +874,128 @@ else:
         # [TAB 3] 날짜별 및 조건별 사진 비교 시각화
         # ======================================================================
         with tab_compare:
-    st.caption("💡 등록된 현미경 사진들을 시간 흐름(날짜별) 또는 동일 일자의 조건별로 나란히 비교할 수 있습니다.")
+            st.caption("💡 등록된 현미경 사진들을 시간 흐름(날짜별) 또는 동일 일자의 조건별로 나란히 비교할 수 있습니다.")
 
-    treatments_with_img = []
-    for t in treatments:
-        b_media, pure_note, img_b64 = parse_note_basal_image(t)
-        if img_b64:
-            t_copy = dict(t)
-            t_copy['parsed_basal'] = b_media
-            t_copy['parsed_note'] = pure_note
-            t_copy['img_b64'] = img_b64
-            treatments_with_img.append(t_copy)
-
-    if not treatments_with_img:
-        st.warning("🖼️ 현재 플레이트에 등록된 현미경 사진이 없습니다.")
-    else:
-        compare_mode = st.radio(
-            "📌 비교 보기 방식 선택",
-            ["📅 1. 날짜별 변화 비교 (동일 Well/조건의 시계열 변화)", "🧪 2. 조건별 결과 비교 (동일 날짜의 Well/조건 간 비교)"],
-            horizontal=True
-        )
-
-        st.markdown("---")
-        grid_cols_count = st.slider("📐 한 줄에 표시할 사진 개수 (열 조정)", min_value=2, max_value=6, value=3)
-
-        if compare_mode.startswith("📅"):
-            all_wells_with_img = sorted(list(set([t['well_position'] for t in treatments_with_img])))
-            
-            c_sel1, c_sel2 = st.columns([1, 2])
-            with c_sel1:
-                selected_compare_well = st.selectbox("🎯 비교할 Well 선택", all_wells_with_img)
-
-            well_img_list = [t for t in treatments_with_img if t['well_position'] == selected_compare_well]
-            well_img_list = sorted(well_img_list, key=lambda x: x['treatment_date'])
-
-            st.markdown(f"##### 🧫 Well [{selected_compare_well}] 날짜별 사진 변화 ({len(well_img_list)}장)")
-
-            img_cols = st.columns(grid_cols_count)
-            for idx, t_item in enumerate(well_img_list):
-                with img_cols[idx % grid_cols_count]:
-                    formatted_cond = format_compound_summary(t_item['compound_name'], t_item['concentration'])
-                    analysis_tag = t_item.get('analysis_status', '미진행')
+            treatments_with_img = []
+            for t in treatments:
+                b_media, pure_note, img_b64 = parse_note_basal_image(t)
+                if img_b64:
+                    t_copy = dict(t)
+                    t_copy['parsed_basal'] = b_media
+                    t_copy['parsed_note'] = pure_note
+                    t_copy['img_b64'] = img_b64
+                    treatments_with_img.append(t_copy)
+        
+            if not treatments_with_img:
+                st.warning("🖼️ 현재 플레이트에 등록된 현미경 사진이 없습니다.")
+            else:
+                compare_mode = st.radio(
+                    "📌 비교 보기 방식 선택",
+                    ["📅 1. 날짜별 변화 비교 (동일 Well/조건의 시계열 변화)", "🧪 2. 조건별 결과 비교 (동일 날짜의 Well/조건 간 비교)"],
+                    horizontal=True
+                )
+        
+                st.markdown("---")
+                grid_cols_count = st.slider("📐 한 줄에 표시할 사진 개수 (열 조정)", min_value=2, max_value=6, value=3)
+        
+                if compare_mode.startswith("📅"):
+                    all_wells_with_img = sorted(list(set([t['well_position'] for t in treatments_with_img])))
                     
-                    st.markdown(
-                        f"""
-                        <div style="border: 1px solid #cbd5e1; padding: 8px; border-radius: 8px; background-color: #f8fafc; margin-bottom: 12px;">
-                            <p style="margin:0; font-weight:bold; color:#1e293b; font-size:14px;">📅 {t_item['treatment_date']}</p>
-                            <p style="margin:2px 0; color:#3b82f6; font-size:12px;"><b>🧬 세포:</b> {t_item.get('cell_info','-')} | <b>🔬 분석:</b> {analysis_tag}</p>
-                            <p style="margin:0; color:#64748b; font-size:11px;"><b>🧪 조건:</b> {formatted_cond} | <b>🥛 배지:</b> {t_item['parsed_basal']}</p>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
+                    c_sel1, c_sel2 = st.columns([1, 2])
+                    with c_sel1:
+                        selected_compare_well = st.selectbox("🎯 비교할 Well 선택", all_wells_with_img)
+        
+                    well_img_list = [t for t in treatments_with_img if t['well_position'] == selected_compare_well]
+                    well_img_list = sorted(well_img_list, key=lambda x: x['treatment_date'])
+        
+                    st.markdown(f"##### 🧫 Well [{selected_compare_well}] 날짜별 사진 변화 ({len(well_img_list)}장)")
+        
+                    img_cols = st.columns(grid_cols_count)
+                    for idx, t_item in enumerate(well_img_list):
+                        with img_cols[idx % grid_cols_count]:
+                            formatted_cond = format_compound_summary(t_item['compound_name'], t_item['concentration'])
+                            analysis_tag = t_item.get('analysis_status', '미진행')
+                            
+                            st.markdown(
+                                f"""
+                                <div style="border: 1px solid #cbd5e1; padding: 8px; border-radius: 8px; background-color: #f8fafc; margin-bottom: 12px;">
+                                    <p style="margin:0; font-weight:bold; color:#1e293b; font-size:14px;">📅 {t_item['treatment_date']}</p>
+                                    <p style="margin:2px 0; color:#3b82f6; font-size:12px;"><b>🧬 세포:</b> {t_item.get('cell_info','-')} | <b>🔬 분석:</b> {analysis_tag}</p>
+                                    <p style="margin:0; color:#64748b; font-size:11px;"><b>🧪 조건:</b> {formatted_cond} | <b>🥛 배지:</b> {t_item['parsed_basal']}</p>
+                                </div>
+                                """,
+                                unsafe_allow_html=True
+                            )
+                            
+                            display_image_from_b64(t_item['img_b64'], caption=f"{t_item['treatment_date']} - {selected_compare_well}")
+                            
+                            # -------------------------------------------------------------
+                            # 📝 [신규] 개별 사진 메모 작성 / 수정 기능 (날짜별 비교)
+                            # -------------------------------------------------------------
+                            unique_id = t_item.get('id', f"{t_item['well_position']}_{t_item['treatment_date']}")
+                            current_note = t_item.get('parsed_note', '')
+                            
+                            with st.expander("📝 사진 메모 작성/수정", expanded=bool(current_note)):
+                                input_note = st.text_area(
+                                    "관찰 소견 / 메모",
+                                    value=current_note,
+                                    key=f"note_date_{unique_id}_{idx}",
+                                    height=80,
+                                    placeholder="특이사항, 관찰 소견 등을 입력하세요..."
+                                )
+                                if st.button("💾 메모 저장", key=f"btn_date_{unique_id}_{idx}", use_container_width=True):
+                                    # TODO: 실제 사용 중인 DB 저장 함수로 대체 가능 (예: db.update_treatment_note(unique_id, input_note))
+                                    t_item['parsed_note'] = input_note
+                                    st.toast(f"[{t_item['treatment_date']}] 메모가 저장되었습니다!", icon="✅")
+                                    st.rerun()
+        
+                else:
+                    all_dates_with_img = sorted(list(set([t['treatment_date'] for t in treatments_with_img])))
                     
-                    display_image_from_b64(t_item['img_b64'], caption=f"{t_item['treatment_date']} - {selected_compare_well}")
-                    
-                    # -------------------------------------------------------------
-                    # 📝 [신규] 개별 사진 메모 작성 / 수정 기능 (날짜별 비교)
-                    # -------------------------------------------------------------
-                    unique_id = t_item.get('id', f"{t_item['well_position']}_{t_item['treatment_date']}")
-                    current_note = t_item.get('parsed_note', '')
-                    
-                    with st.expander("📝 사진 메모 작성/수정", expanded=bool(current_note)):
-                        input_note = st.text_area(
-                            "관찰 소견 / 메모",
-                            value=current_note,
-                            key=f"note_date_{unique_id}_{idx}",
-                            height=80,
-                            placeholder="특이사항, 관찰 소견 등을 입력하세요..."
-                        )
-                        if st.button("💾 메모 저장", key=f"btn_date_{unique_id}_{idx}", use_container_width=True):
-                            # TODO: 실제 사용 중인 DB 저장 함수로 대체 가능 (예: db.update_treatment_note(unique_id, input_note))
-                            t_item['parsed_note'] = input_note
-                            st.toast(f"[{t_item['treatment_date']}] 메모가 저장되었습니다!", icon="✅")
-                            st.rerun()
-
-        else:
-            all_dates_with_img = sorted(list(set([t['treatment_date'] for t in treatments_with_img])))
-            
-            c_sel1, c_sel2 = st.columns([1, 2])
-            with c_sel1:
-                selected_compare_date = st.selectbox("📅 비교할 날짜 선택", all_dates_with_img)
-
-            date_img_list = [t for t in treatments_with_img if t['treatment_date'] == selected_compare_date]
-            date_img_list = sorted(date_img_list, key=lambda x: x['well_position'])
-
-            st.markdown(f"##### 📅 [{selected_compare_date}] 각 Well/조건별 사진 비교 ({len(date_img_list)}장)")
-
-            img_cols = st.columns(grid_cols_count)
-            for idx, t_item in enumerate(date_img_list):
-                with img_cols[idx % grid_cols_count]:
-                    formatted_cond = format_compound_summary(t_item['compound_name'], t_item['concentration'])
-                    analysis_tag = t_item.get('analysis_status', '미진행')
-                    
-                    st.markdown(
-                        f"""
-                        <div style="border: 1px solid #cbd5e1; padding: 8px; border-radius: 8px; background-color: #f8fafc; margin-bottom: 12px;">
-                            <p style="margin:0; font-weight:bold; color:#0f172a; font-size:14px;">📍 Well {t_item['well_position']}</p>
-                            <p style="margin:2px 0; color:#059669; font-size:12px;"><b>🧬 세포:</b> {t_item.get('cell_info','-')} | <b>🔬 분석:</b> {analysis_tag}</p>
-                            <p style="margin:0; color:#64748b; font-size:11px;"><b>🧪 조건:</b> {formatted_cond} | <b>🥛 배지:</b> {t_item['parsed_basal']}</p>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
-                    
-                    display_image_from_b64(t_item['img_b64'], caption=f"Well {t_item['well_position']} ({formatted_cond})")
-                    
-                    # -------------------------------------------------------------
-                    # 📝 [신규] 개별 사진 메모 작성 / 수정 기능 (조건별 비교)
-                    # -------------------------------------------------------------
-                    unique_id = t_item.get('id', f"{t_item['well_position']}_{t_item['treatment_date']}")
-                    current_note = t_item.get('parsed_note', '')
-                    
-                    with st.expander("📝 사진 메모 작성/수정", expanded=bool(current_note)):
-                        input_note = st.text_area(
-                            "관찰 소견 / 메모",
-                            value=current_note,
-                            key=f"note_cond_{unique_id}_{idx}",
-                            height=80,
-                            placeholder="특이사항, 관찰 소견 등을 입력하세요..."
-                        )
-                        if st.button("💾 메모 저장", key=f"btn_cond_{unique_id}_{idx}", use_container_width=True):
-                            # TODO: 실제 사용 중인 DB 저장 함수로 대체 가능 (예: db.update_treatment_note(unique_id, input_note))
-                            t_item['parsed_note'] = input_note
-                            st.toast(f"[Well {t_item['well_position']}] 메모가 저장되었습니다!", icon="✅")
-                            st.rerun()
+                    c_sel1, c_sel2 = st.columns([1, 2])
+                    with c_sel1:
+                        selected_compare_date = st.selectbox("📅 비교할 날짜 선택", all_dates_with_img)
+        
+                    date_img_list = [t for t in treatments_with_img if t['treatment_date'] == selected_compare_date]
+                    date_img_list = sorted(date_img_list, key=lambda x: x['well_position'])
+        
+                    st.markdown(f"##### 📅 [{selected_compare_date}] 각 Well/조건별 사진 비교 ({len(date_img_list)}장)")
+        
+                    img_cols = st.columns(grid_cols_count)
+                    for idx, t_item in enumerate(date_img_list):
+                        with img_cols[idx % grid_cols_count]:
+                            formatted_cond = format_compound_summary(t_item['compound_name'], t_item['concentration'])
+                            analysis_tag = t_item.get('analysis_status', '미진행')
+                            
+                            st.markdown(
+                                f"""
+                                <div style="border: 1px solid #cbd5e1; padding: 8px; border-radius: 8px; background-color: #f8fafc; margin-bottom: 12px;">
+                                    <p style="margin:0; font-weight:bold; color:#0f172a; font-size:14px;">📍 Well {t_item['well_position']}</p>
+                                    <p style="margin:2px 0; color:#059669; font-size:12px;"><b>🧬 세포:</b> {t_item.get('cell_info','-')} | <b>🔬 분석:</b> {analysis_tag}</p>
+                                    <p style="margin:0; color:#64748b; font-size:11px;"><b>🧪 조건:</b> {formatted_cond} | <b>🥛 배지:</b> {t_item['parsed_basal']}</p>
+                                </div>
+                                """,
+                                unsafe_allow_html=True
+                            )
+                            
+                            display_image_from_b64(t_item['img_b64'], caption=f"Well {t_item['well_position']} ({formatted_cond})")
+                            
+                            # -------------------------------------------------------------
+                            # 📝 [신규] 개별 사진 메모 작성 / 수정 기능 (조건별 비교)
+                            # -------------------------------------------------------------
+                            unique_id = t_item.get('id', f"{t_item['well_position']}_{t_item['treatment_date']}")
+                            current_note = t_item.get('parsed_note', '')
+                            
+                            with st.expander("📝 사진 메모 작성/수정", expanded=bool(current_note)):
+                                input_note = st.text_area(
+                                    "관찰 소견 / 메모",
+                                    value=current_note,
+                                    key=f"note_cond_{unique_id}_{idx}",
+                                    height=80,
+                                    placeholder="특이사항, 관찰 소견 등을 입력하세요..."
+                                )
+                                if st.button("💾 메모 저장", key=f"btn_cond_{unique_id}_{idx}", use_container_width=True):
+                                    # TODO: 실제 사용 중인 DB 저장 함수로 대체 가능 (예: db.update_treatment_note(unique_id, input_note))
+                                    t_item['parsed_note'] = input_note
+                                    st.toast(f"[Well {t_item['well_position']}] 메모가 저장되었습니다!", icon="✅")
+                                    st.rerun()
