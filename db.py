@@ -475,3 +475,83 @@ def get_trash_count():
         + len(get_trash_daily_logs())
         + len(get_trash_recipes())
     )
+# db.py 맨 아래에 아래 코드를 추가/확장해주세요.
+
+def init_analysis_tables():
+    """분석 데이터(Cell Count, qPCR, FACS) 테이블 생성"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # 분석 데이터 통합 관리 테이블 (Cell Count, qPCR, FACS 등)
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS analysis_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            batch_id TEXT NOT NULL,
+            data_type TEXT NOT NULL, -- 'Cell Count', 'qPCR', 'FACS'
+            sample_name TEXT,
+            metric_1_name TEXT,     -- 예: Concentration_M_mL, Relative_Expression, Pos_Pct
+            metric_1_val REAL,
+            metric_2_name TEXT,     -- 예: Viability_pct
+            metric_2_val REAL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """
+    )
+    conn.commit()
+    conn.close()
+
+
+def save_analysis_data(batch_id, data_type, df):
+    """Dataframe 형태의 분석 결과를 DB에 저장"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    for _, row in df.iterrows():
+        sample = row.get("Sample", row.get("Gene", row.get("Marker", "-")))
+
+        # 컬럼 위치 기반 저장 logic
+        cols = [c for c in df.columns if c not in ["Batch_ID", "Sample", "Gene", "Marker"]]
+        val1_name = cols[0] if len(cols) > 0 else None
+        val1_val = row[val1_name] if val1_name else None
+
+        val2_name = cols[1] if len(cols) > 1 else None
+        val2_val = row[val2_name] if val2_name else None
+
+        cursor.execute(
+            """
+            INSERT INTO analysis_results (batch_id, data_type, sample_name, metric_1_name, metric_1_val, metric_2_name, metric_2_val)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+            (
+                batch_id,
+                data_type,
+                str(sample),
+                val1_name,
+                val1_val,
+                val2_name,
+                val2_val,
+            ),
+        )
+
+    conn.commit()
+    conn.close()
+
+
+def get_analysis_data(batch_id, data_type=None):
+    """배치 ID로 분석 결과 조회"""
+    conn = get_connection()
+    if data_type:
+        df = pd.read_sql_query(
+            "SELECT * FROM analysis_results WHERE batch_id = ? AND data_type = ? ORDER BY id DESC",
+            conn,
+            params=(batch_id, data_type),
+        )
+    else:
+        df = pd.read_sql_query(
+            "SELECT * FROM analysis_results WHERE batch_id = ? ORDER BY id DESC",
+            conn,
+            params=(batch_id,),
+        )
+    conn.close()
+    return df
