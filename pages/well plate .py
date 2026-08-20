@@ -1,18 +1,26 @@
+import sys
+import os
+
+# --- 0. 모듈 탐색 경로 설정 (Import Error 방지) ---
+# pages 디렉터리와 상위(루트) 디렉터리를 모두 sys.path에 등록합니다.
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+_parent_dir = os.path.dirname(_current_dir)
+
+if _current_dir not in sys.path:
+    sys.path.insert(0, _current_dir)
+if _parent_dir not in sys.path:
+    sys.path.insert(0, _parent_dir)
+
 import streamlit as st
 import pandas as pd
 import datetime
 import plotly.graph_objects as go
 import base64
-import sys
-import os
-
-# 현재 폴더 경로를 파이썬 모듈 검색 경로에 추가하여 import 오류 방지
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import db
 import style
 
-# 분리한 커스텀 유틸리티 불러오기
+# 분리한 커스텀 유틸리티 모듈 불러오기
 from well_plate_utils import (
     ANALYSIS_OPTIONS,
     PLATE_PRESETS,
