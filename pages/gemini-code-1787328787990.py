@@ -336,6 +336,12 @@ else:
             st.markdown("### 🧪 전체 프로젝트의 실험 중인 플레이트 목록")
             st.caption("모든 웰의 분석이 완료된 플레이트는 제외되며, 현재 분석 및 실험이 진행 중인 플레이트만 표시됩니다.")
 
+            # 선택 이동을 위한 콜백 함수 정의
+            def navigate_to_plate(proj_label, pl_key, proj_name, pl_name):
+                st.session_state.selected_plate_proj_label = proj_label
+                st.session_state.selected_plate_select = pl_key
+                st.toast(f"'{proj_name}' 프로젝트의 '{pl_name}' 플레이트로 이동합니다.", icon="🧫")
+
             # 1. 모든 프로젝트 및 플레이트 전수 조회
             active_plates = []
             all_projects = db.get_projects()
@@ -346,13 +352,13 @@ else:
                     pl_treatments = db.get_treatments_by_plate(pl['id'])
                     total_cap = pl['rows'] * pl['cols']
                     
-                    # 분석 완료된 Well 추출 (analysis_status가 존재하고 '미진행'이 아닌 경우)
+                    # 분석 완료된 Well 추출
                     completed_wells = set([
                         t.get('well_position') for t in pl_treatments 
                         if t.get('analysis_status') and t.get('analysis_status') != '미진행'
                     ])
                     
-                    # 모든 웰의 분석이 완료된 플레이트(completed_wells 개수 == total_cap)는 제외
+                    # 모든 웰의 분석이 완료되지 않은 플레이트만 수집
                     if len(completed_wells) < total_cap:
                         active_plates.append({
                             'project': proj,
@@ -393,7 +399,7 @@ else:
 
                     well_count = len(set([t.get('well_position') for t in pl_treatments]))
 
-                    # 사이드바 프로젝트/플레이트 옵션 선택용 키 생성
+                    # 사이드바 선택 상자와 매칭될 라벨 생성
                     proj_label = f"[{proj['group_name'] if proj['group_name'] else '기본'}] {proj['name']} (ID: {proj['id']})"
                     pl_key = f"{pl['name']} ({pl['rows']}x{pl['cols']} Wells)"
 
@@ -414,12 +420,15 @@ else:
                             unsafe_allow_html=True
                         )
                         
-                        # 카드 클릭 시 해당 프로젝트 및 플레이트로 대시보드 상태 변경 후 이동
-                        if st.button(f"🔍 [{pl['name']}] 편집하러 가기", key=f"btn_goto_pl_{pl['id']}", use_container_width=True, type="primary"):
-                            st.session_state.selected_plate_proj_label = proj_label
-                            st.session_state.selected_plate_select = pl_key
-                            st.toast(f"'{proj['name']}' 프로젝트의 '{pl['name']}' 플레이트로 이동합니다.", icon="🧫")
-                            st.rerun()
+                        # on_click 콜백을 이용하여 safe하게 session_state 업데이트
+                        st.button(
+                            f"🔍 [{pl['name']}] 편집하러 가기",
+                            key=f"btn_goto_pl_{pl['id']}",
+                            use_container_width=True,
+                            type="primary",
+                            on_click=navigate_to_plate,
+                            args=(proj_label, pl_key, proj['name'], pl['name'])
+                        )
         # ======================================================================
         # [TAB 1] Plotly 시각화 및 편집
         # ======================================================================
