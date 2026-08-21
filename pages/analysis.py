@@ -6,17 +6,11 @@ import streamlit as st
 # ======================================================================
 
 def extract_image_data(item):
-    """
-    treatment 아이템에서 base64 이미지 문자열을 추출합니다.
-    (키 이름이 'image_data', 'image_b64', 'image' 등 다양한 상황에 대비)
-    """
+    """treatment 아이템에서 base64 이미지 문자열을 추출합니다."""
     return item.get('image_data') or item.get('image_b64') or item.get('image')
 
 def display_image_from_b64(b64_str, caption=""):
-    """
-    base64 이미지 문자열을 Streamlit st.image로 출력합니다.
-    data:image/...;base64, 헤더가 포함되어 있어도 처리 가능하도록 작성했습니다.
-    """
+    """base64 이미지 문자열을 Streamlit st.image로 안전하게 출력합니다."""
     try:
         if "," in b64_str:
             b64_str = b64_str.split(",")[1]
@@ -26,18 +20,14 @@ def display_image_from_b64(b64_str, caption=""):
         st.error(f"이미지 로드 실패: {e}")
 
 def parse_note_basal_image(item):
-    """
-    노트, 배지 정보 등을 파싱하는 함수입니다. (기존 데이터 구조에 맞게 변경 가능)
-    """
+    """노트, 배지 정보 등을 파싱하는 함수입니다."""
     basal = item.get('basal_media', '')
     note = item.get('note', '')
     img = extract_image_data(item)
     return basal, note, img
 
 def format_compound_summary(compound_name, concentration):
-    """
-    화합물 및 농도 정보를 깔끔하게 포맷팅합니다.
-    """
+    """화합물 및 농도 정보를 포맷팅합니다."""
     if compound_name and concentration:
         return f"{compound_name} ({concentration})"
     elif compound_name:
@@ -46,35 +36,37 @@ def format_compound_summary(compound_name, concentration):
 
 
 # ======================================================================
-# 2. 테스트용 메인 데이터 준비 및 UI 탭 구성
+# 2. 테스트용 메인 데이터 준비
 # ======================================================================
 
 st.set_page_config(layout="wide")
 
-# (선택 사항) 테스트용 예시 데이터 - 실제 환경에서는 데이터베이스/세션 상태에서 받아온 treatments를 사용하세요.
+# 예시 데이터 (실제 프로젝트 환경에서는 DB 또는 세션 상태에서 가져옵니다)
 if "treatments" not in st.session_state:
-    # 테스트용 1x1 투명 PNG Base64 예시 데이터
-    dummy_b64 = "iVBORw0KGgoAAAANSUEngine/iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    dummy_b64 = "iVBORw0KGgoAAAANSUEngine/iVBORw0KGgoAAAANSUEngine/iVBORw0KGgoAAAANSUEngine/iVBORw0KGgoAAAANSUEngine"
     st.session_state.treatments = [
         {
+            "project_name": "혈관 오가노이드 성숙도 실험",
             "well_position": "A1",
             "treatment_date": "2026-03-01",
-            "cell_info": "iPSC-derived Organoid",
-            "compound_name": "Compound A",
-            "concentration": "10 uM",
-            "note": "초기 배양 상태 양호",
+            "cell_info": "iPSC-derived ECs",
+            "compound_name": "VEGF",
+            "concentration": "50 ng/mL",
+            "note": "초기 배양 양호",
             "image_data": dummy_b64
         },
         {
+            "project_name": "혈관 오가노이드 성숙도 실험",
             "well_position": "A1",
             "treatment_date": "2026-03-05",
-            "cell_info": "iPSC-derived Organoid",
-            "compound_name": "Compound A",
-            "concentration": "10 uM",
-            "note": "혈관 형성 관찰됨",
+            "cell_info": "iPSC-derived ECs",
+            "compound_name": "VEGF",
+            "concentration": "50 ng/mL",
+            "note": "혈관 공통 구조 형성",
             "image_data": dummy_b64
         },
         {
+            "project_name": "장 오가노이드 QC 스크리닝",
             "well_position": "B2",
             "treatment_date": "2026-03-01",
             "cell_info": "Intestinal Organoid",
@@ -85,26 +77,51 @@ if "treatments" not in st.session_state:
         }
     ]
 
-treatments = st.session_state.treatments
+all_treatments = st.session_state.treatments
 
-# 탭 생성
+# ======================================================================
+# 3. 👈 [왼쪽 사이드바] 프로젝트 선택 UI
+# ======================================================================
+
+with st.sidebar:
+    st.header("📂 프로젝트 선택")
+    
+    # 등록된 프로젝트 목록 추출 (중복 제거)
+    project_list = sorted(list(set([t.get('project_name', '기타/미지정') for t in all_treatments])))
+    
+    # 전체 선택 옵션 추가
+    selected_project = st.selectbox(
+        "비교할 프로젝트를 선택하세요:",
+        options=["전체 프로젝트"] + project_list
+    )
+    
+    st.divider()
+    st.caption("🔍 필터 옵션을 선택하면 해당 프로젝트의 사진 데이터만 필터링되어 비교 화면에 표시됩니다.")
+
+# 데이터 필터링 적용
+if selected_project == "전체 프로젝트":
+    treatments = all_treatments
+else:
+    treatments = [t for t in all_treatments if t.get('project_name', '기타/미지정') == selected_project]
+
+
+# ======================================================================
+# 4. [메인 영역] 탭 구성 및 사진 비교 시각화
+# ======================================================================
+
 tab_main, tab_compare = st.tabs(["메인 화면", "📸 사진 비교"])
 
-
-# ======================================================================
-# 3. [TAB 4] 사진 비교 시각화 실행
-# ======================================================================
 with tab_compare:
-    st.markdown("### 📸 사진 비교 시각화")
+    st.markdown(f"### 📸 사진 비교 시각화 (`{selected_project}`)")
     st.caption("Well별로 등록된 사진을 날짜별/조건별로 모아 비교합니다.")
     
     if not treatments:
-        st.info("등록된 데이터가 없습니다.")
+        st.info("선택한 프로젝트에 등록된 데이터가 없습니다.")
     else:
         img_data = [t for t in treatments if extract_image_data(t)]
         
         if not img_data:
-            st.warning("첨부된 사진 데이터가 없습니다.")
+            st.warning("선택한 프로젝트에 첨부된 사진 데이터가 없습니다.")
         else:
             compare_mode = st.radio("보기 모드", ["날짜별 그룹화", "Well별 그룹화"], horizontal=True)
             
