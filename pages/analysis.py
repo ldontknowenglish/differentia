@@ -6,8 +6,9 @@ if c_val2.strip():
     e_comps.append(c_val2.strip())
     e_concs.append(n_val2.strip())
 
-e_comp_str = ", ".join(e_comps)
-e_conc_str = ", ".join(e_concs)
+if e_analysis_val == "미진행":
+    e_comp_str = ", ".join(e_comps)
+    e_conc_str = ", ".join(e_concs)
 else:
     e_comp_str = f"분석 진행 ({e_analysis_val})"
     e_conc_str = ""
@@ -28,7 +29,8 @@ if st.button("💾 저장", key=f"btn_e_save_{pos}", use_container_width=True, t
         st.rerun()
     else:
         st.error("처리 물질명을 입력해 주세요.")
-else:
+
+if len(selected_wells) > 1:
     st.info(f"🎯 **{len(selected_wells)}개의 Well**이 선택되었습니다. 다중 선택 모드입니다.")
     with st.form("multi_edit_form", clear_on_submit=True):
         st.markdown("##### ➕ 선택된 모든 Well에 동일한 처리 추가")
@@ -83,7 +85,7 @@ else:
             st.success(f"{len(selected_wells)}개의 Well에 처리가 일괄 추가되었습니다!")
             st.rerun()
 
-else:
+elif not selected_wells:
     st.info("👈 왼쪽 차트에서 편집할 Well을 선택하세요. (클릭 또는 박스/올가미 선택)")
 
 with edit_main_tab2:
