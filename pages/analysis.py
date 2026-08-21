@@ -38,46 +38,97 @@ def format_compound_summary(compound_name, concentration):
 # ======================================================================
 # 2. 테스트용 메인 데이터 준비
 # ======================================================================
+        with tab_compare:
+            st.caption("💡 등록된 현미경 사진들을 시간 흐름(날짜별) 또는 동일 일자의 조건별로 나란히 비교할 수 있습니다.")
 
-st.set_page_config(layout="wide")
+            treatments_with_img = []
+            for t in treatments:
+                b_media, pure_note, img_b64 = parse_note_basal_image(t)
+                if img_b64:
+                    t_copy = dict(t)
+                    t_copy['parsed_basal'] = b_media
+                    t_copy['parsed_note'] = pure_note
+                    t_copy['img_b64'] = img_b64
+                    treatments_with_img.append(t_copy)
 
-# 예시 데이터 (실제 프로젝트 환경에서는 DB 또는 세션 상태에서 가져옵니다)
-if "treatments" not in st.session_state:
-    dummy_b64 = "iVBORw0KGgoAAAANSUEngine/iVBORw0KGgoAAAANSUEngine/iVBORw0KGgoAAAANSUEngine/iVBORw0KGgoAAAANSUEngine"
-    st.session_state.treatments = [
-        {
-            "project_name": "혈관 오가노이드 성숙도 실험",
-            "well_position": "A1",
-            "treatment_date": "2026-03-01",
-            "cell_info": "iPSC-derived ECs",
-            "compound_name": "VEGF",
-            "concentration": "50 ng/mL",
-            "note": "초기 배양 양호",
-            "image_data": dummy_b64
-        },
-        {
-            "project_name": "혈관 오가노이드 성숙도 실험",
-            "well_position": "A1",
-            "treatment_date": "2026-03-05",
-            "cell_info": "iPSC-derived ECs",
-            "compound_name": "VEGF",
-            "concentration": "50 ng/mL",
-            "note": "혈관 공통 구조 형성",
-            "image_data": dummy_b64
-        },
-        {
-            "project_name": "장 오가노이드 QC 스크리닝",
-            "well_position": "B2",
-            "treatment_date": "2026-03-01",
-            "cell_info": "Intestinal Organoid",
-            "compound_name": "Control",
-            "concentration": "0 uM",
-            "note": "-",
-            "image_data": dummy_b64
-        }
-    ]
+            if not treatments_with_img:
+                st.warning("🖼️ 현재 플레이트에 등록된 현미경 사진이 없습니다.")
+            else:
+                compare_mode = st.radio(
+                    "📌 비교 보기 방식 선택",
+                    ["📅 1. 날짜별 변화 비교 (동일 Well/조건의 시계열 변화)", "🧪 2. 조건별 결과 비교 (동일 날짜의 Well/조건 간 비교)"],
+                    horizontal=True
+                )
 
-all_treatments = st.session_state.treatments
+                st.markdown("---")
+                grid_cols_count = st.slider("📐 한 줄에 표시할 사진 개수 (열 조정)", min_value=2, max_value=6, value=3)
+
+                if compare_mode.startswith("📅"):
+                    all_wells_with_img = sorted(list(set([t['well_position'] for t in treatments_with_img])))
+                    
+                    c_sel1, c_sel2 = st.columns([1, 2])
+                    with c_sel1:
+                        selected_compare_well = st.selectbox("🎯 비교할 Well 선택", all_wells_with_img)
+
+                    well_img_list = [t for t in treatments_with_img if t['well_position'] == selected_compare_well]
+                    well_img_list = sorted(well_img_list, key=lambda x: x['treatment_date'])
+
+                    st.markdown(f"##### 🧫 Well [{selected_compare_well}] 날짜별 사진 변화 ({len(well_img_list)}장)")
+
+                    img_cols = st.columns(grid_cols_count)
+                    for idx, t_item in enumerate(well_img_list):
+                        with img_cols[idx % grid_cols_count]:
+                            formatted_cond = format_compound_summary(t_item['compound_name'], t_item['concentration'])
+                            analysis_tag = t_item.get('analysis_status', '미진행')
+                            st.markdown(
+                                f"""
+                                <div style="border: 1px solid #cbd5e1; padding: 8px; border-radius: 8px; background-color: #f8fafc; margin-bottom: 12px;">
+                                    <p style="margin:0; font-weight:bold; color:#1e293b; font-size:14px;">📅 {t_item['treatment_date']}</p>
+                                    <p style="margin:2px 0; color:#3b82f6; font-size:12px;"><b>🧬 세포:</b> {t_item.get('cell_info','-')} | <b>🔬 분석:</b> {analysis_tag}</p>
+                                    <p style="margin:0; color:#64748b; font-size:11px;"><b>🧪 조건:</b> {formatted_cond} | <b>🥛 배지:</b> {t_item['parsed_basal']}</p>
+                                </div>
+                                """,
+                                unsafe_allow_html=True
+                            )
+                            display_image_from_b64(t_item['img_b64'], caption=f"{t_item['treatment_date']} - {selected_compare_well}")
+                            if t_item['parsed_note']:
+                                st.caption(f"📝 {t_item['parsed_note']}")
+
+                else:
+                    all_dates_with_img = sorted(list(set([t['treatment_date'] for t in treatments_with_img])))
+                    
+                    c_sel1, c_sel2 = st.columns([1, 2])
+                    with c_sel1:
+                        selected_compare_date = st.selectbox("📅 비교할 날짜 선택", all_dates_with_img)
+
+                    date_img_list = [t for t in treatments_with_img if t['treatment_date'] == selected_compare_date]
+                    date_img_list = sorted(date_img_list, key=lambda x: x['well_position'])
+
+                    st.markdown(f"##### 📅 [{selected_compare_date}] 각 Well/조건별 사진 비교 ({len(date_img_list)}장)")
+
+                    img_cols = st.columns(grid_cols_count)
+                    for idx, t_item in enumerate(date_img_list):
+                        with img_cols[idx % grid_cols_count]:
+                            formatted_cond = format_compound_summary(t_item['compound_name'], t_item['concentration'])
+                            analysis_tag = t_item.get('analysis_status', '미진행')
+                            st.markdown(
+                                f"""
+                                <div style="border: 1px solid #cbd5e1; padding: 8px; border-radius: 8px; background-color: #f8fafc; margin-bottom: 12px;">
+                                    <p style="margin:0; font-weight:bold; color:#0f172a; font-size:14px;">📍 Well {t_item['well_position']}</p>
+                                    <p style="margin:2px 0; color:#059669; font-size:12px;"><b>🧬 세포:</b> {t_item.get('cell_info','-')} | <b>🔬 분석:</b> {analysis_tag}</p>
+                                    <p style="margin:0; color:#64748b; font-size:11px;"><b>🧪 조건:</b> {formatted_cond} | <b>🥛 배지:</b> {t_item['parsed_basal']}</p>
+                                </div>
+                                """,
+                                unsafe_allow_html=True
+                            )
+                            display_image_from_b64(t_item['img_b64'], caption=f"Well {t_item['well_position']} ({formatted_cond})")
+                            if t_item['parsed_note']:
+                                st.caption(f"📝 {t_item['parsed_note']}")
+                            
+                            
+                            
+            
+
 
 # ======================================================================
 # 3. 👈 [왼쪽 사이드바] 프로젝트 선택 UI
