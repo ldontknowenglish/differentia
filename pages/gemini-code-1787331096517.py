@@ -432,12 +432,12 @@ def render_tab_visualization(selected_plate, treatments):
 
                     with st.expander(f"➕ Well [{pos}] 신규 처리 및 사진 작성", expanded=True):
                         
-                        # --- 12-well -> 24-well 계대/이동 옵션 도우미 ---
-                        st.markdown("<div class='transfer-box'><b>🔄 12-well -> 24-well 이동/계대 배양 도우미</b>", unsafe_allow_html=True)
-                        is_transfer = st.checkbox("12-well 플레이트에서 옮겨온 샘플인가요?", key=f"chk_trans_{pos}")
+                        # --- 계대/이동 옵션 도우미 ---
+                        st.markdown("<div class='transfer-box'><b>🔄 이동/계대 배양 도우미</b>", unsafe_allow_html=True)
+                        is_transfer = st.checkbox("다른 플레이트에서 옮겨온 샘플인가요?", key=f"chk_trans_{pos}")
                         source_info = ""
                         if is_transfer:
-                            src_p = st.text_input("출처 12-well 위치", value="12WP-A1", key=f"src_p_{pos}")
+                            src_p = st.text_input("출처", value="12WP-A1", key=f"src_p_{pos}")
                             source_info = f"[Transferred from {src_p}]"
                         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -453,7 +453,7 @@ def render_tab_visualization(selected_plate, treatments):
                             ex_comp_str, ex_conc_str = f"분석 진행 ({ex_analysis})", ""
                             st.info(f"🔬 **{ex_analysis}** 분석 모드입니다.")
 
-                        ex_note = st.text_input("비고", value=f"12WP에서 24WP로 이동 {source_info}".strip(), placeholder="상세 조건", key=f"ex_note_{pos}")
+                        ex_note = st.text_input("비고", value=f"passaging {source_info}".strip(), placeholder="상세 조건", key=f"ex_note_{pos}")
                         ex_file = st.file_uploader("📷 현미경 사진 첨부 (선택)", type=["png", "jpg", "jpeg"], key=f"ex_file_{pos}")
 
                         if st.button(f"💾 Well [{pos}] 처리 저장", key=f"btn_ex_save_{pos}", use_container_width=True, type="primary"):
