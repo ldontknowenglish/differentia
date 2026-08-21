@@ -302,7 +302,6 @@ else:
     if selected_plate:
         treatments = db.get_treatments_by_plate(selected_plate['id'])
         
-        # 4개 탭 구성 (사진 비교 탭 포함)
         tab_view, tab_tree, tab_compare = st.tabs([
             "🔴 Well Plate 시각화 & 편집", 
             "🌳 사용자 데이터 기반 계통도", 
@@ -717,113 +716,30 @@ else:
                                         st.rerun()
                                     else:
                                         st.error("최소 하나 이상의 물질명을 입력해 주세요.")
-
-                                                  with tab_sub_info:
-                                st.caption("💡 선택된 Well의 개별 이력을 조회하고 수정/삭제하거나, 일괄 삭제할 수 있습니다.")
-                                
-                                # ----------------------------------------------------
-                                # 1. 선택된 Well의 이력 일괄 삭제 섹션
-                                # ----------------------------------------------------
-                                with st.expander("🗑️ 선택된 Well 이력 일괄 삭제", expanded=False):
-                                    st.warning("⚠️ 지정한 Well에 등록된 모든 처리 이력이 삭제됩니다.")
-                                    wells_to_delete = st.multiselect(
-                                        "삭제할 Well 선택",
-                                        options=selected_wells,
-                                        default=selected_wells,
-                                        key="batch_delete_wells_select"
-                                    )
-                                    if st.button("🚨 선택한 Well의 모든 이력 삭제", key="btn_batch_delete_wells", type="secondary"):
-                                        if wells_to_delete:
-                                            for pos in wells_to_delete:
-                                                if hasattr(db, 'delete_well_treatments'):
-                                                    db.delete_well_treatments(selected_plate['id'], pos)
-                                                elif hasattr(db, 'delete_treatment'):
-                                                    # 개별 아이템 삭제 API만 있는 경우
-                                                    for item in well_all_map.get(pos, []):
-                                                        db.delete_treatment(item['id'])
-                                            st.success(f"✅ {len(wells_to_delete)}개 Well의 이력이 일괄 삭제되었습니다.")
-                                            st.rerun()
-                                        else:
-                                            st.error("삭제할 Well을 선택해 주세요.")
-
-                                st.divider()
-
-                                # ----------------------------------------------------
-                                # 2. 개별 Well 이력 조회 및 수정/삭제
-                                # ----------------------------------------------------
-                                for pos in selected_wells:
-                                    if pos in well_all_map:
-                                        items = well_all_map[pos]
-                                        st.markdown(f"**📍 Well {pos}** ({len(items)}건 이력)")
-                                        
-                                        for item in items:
-                                            item_id = item['id']
-                                            formatted_cond = format_compound_summary(item['compound_name'], item['concentration'])
-                                            
-                                            with st.expander(f"📅 {item['treatment_date']} | 🧬 {item.get('cell_info', '-')} | 🧪 {formatted_cond}", expanded=False):
-                                                b_media_val, pure_note_val, cur_img_b64 = parse_note_basal_image(item)
-                                                
-                                                # 이미지 출력
-                                                if cur_img_b64:
-                                                    display_image_from_b64(cur_img_b64, caption=f"Well {pos} 사진")
-                                                
-                                                # --- 수정 Form ---
-                                                with st.form(key=f"edit_form_{item_id}"):
-                                                    st.markdown("##### ✏️ 이력 수정")
-                                                    
-                                                    e_col1, e_col2 = st.columns(2)
-                                                    with e_col1:
-                                                        try:
-                                                            default_date = datetime.datetime.strptime(str(item['treatment_date']), "%Y-%m-%d").date()
-                                                        except Exception:
-                                                            default_date = datetime.date.today()
-                                                        edit_date = st.date_input("처리 일자", value=default_date, key=f"e_date_{item_id}")
-                                                    
-                                                    with e_col2:
-                                                        edit_cell = st.text_input("세포/오가노이드 정보", value=item.get('cell_info', ''), key=f"e_cell_{item_id}")
-                                                    
-                                                    e_col3, e_col4 = st.columns(2)
-                                                    with e_col3:
-                                                        edit_comp = st.text_input("처리 물질명", value=item.get('compound_name', ''), key=f"e_comp_{item_id}")
-                                                    with e_col4:
-                                                        edit_conc = st.text_input("농도", value=item.get('concentration', ''), key=f"e_conc_{item_id}")
-                                                    
-                                                    edit_analysis = st.selectbox(
-                                                        "분석 상태", 
-                                                        options=ANALYSIS_OPTIONS, 
-                                                        index=ANALYSIS_OPTIONS.index(item.get('analysis_status')) if item.get('analysis_status') in ANALYSIS_OPTIONS else 0,
-                                                        key=f"e_analysis_{item_id}"
-                                                    )
-                                                    
-                                                    edit_note = st.text_input("비고", value=pure_note_val, key=f"e_note_{item_id}")
-                                                    
-                                                    btn_col1, btn_col2 = st.columns([1, 1])
-                                                    with btn_col1:
-                                                        submit_update = st.form_submit_button("💾 수정 사항 저장", use_container_width=True, type="primary")
-                                                    
-                                                    if submit_update:
-                                                        updated_comb_note = build_combined_note(b_media_val, edit_note, cur_img_b64)
-                                                        # DB 업데이트 함수 호출
-                                                        if hasattr(db, 'update_treatment'):
-                                                            db.update_treatment(
-                                                                item_id, str(edit_date), edit_comp.strip(), 
-                                                                edit_conc.strip(), edit_cell.strip(), updated_comb_note, edit_analysis
-                                                            )
-                                                            st.success("수정되었습니다!")
-                                                            st.rerun()
-                                                        else:
-                                                            st.error("db 객체에 update_treatment 메서드가 정의되어 있지 않습니다.")
-
-                                                # --- 개별 삭제 버튼 ---
-                                                if st.button("🗑️ 이 이력 삭제", key=f"btn_del_{item_id}", type="secondary"):
-                                                    if hasattr(db, 'delete_treatment'):
-                                                        db.delete_treatment(item_id)
-                                                        st.success(f"Well {pos}의 해당 이력이 삭제되었습니다.")
-                                                        st.rerun()
-                                                    else:
-                                                        st.error("db 객체에 delete_treatment 메서드가 정의되어 있지 않습니다.")
+                        else:
+                            st.markdown(f"##### 📋 선택된 Well 목록 ({len(selected_wells)}개)")
+                            st.caption("여러 개의 Well이 동시 선택되었습니다. 일괄 삭제 등을 진행할 수 있습니다.")
+                            
+                            with st.expander("🗑️ 선택된 Well 이력 일괄 삭제", expanded=False):
+                                st.warning("⚠️ 지정한 Well에 등록된 모든 처리 이력이 삭제됩니다.")
+                                wells_to_delete = st.multiselect(
+                                    "삭제할 Well 선택",
+                                    options=selected_wells,
+                                    default=selected_wells,
+                                    key="batch_delete_wells_select"
+                                )
+                                if st.button("🚨 선택한 Well의 모든 이력 삭제", key="btn_batch_delete_wells", type="secondary"):
+                                    if wells_to_delete:
+                                        for pos in wells_to_delete:
+                                            if hasattr(db, 'delete_well_treatments'):
+                                                db.delete_well_treatments(selected_plate['id'], pos)
+                                            elif hasattr(db, 'delete_treatment'):
+                                                for item in well_all_map.get(pos, []):
+                                                    db.delete_treatment(item['id'])
+                                        st.success(f"✅ {len(wells_to_delete)}개 Well의 이력이 일괄 삭제되었습니다.")
+                                        st.rerun()
                                     else:
-                                        st.markdown(f"**📍 Well {pos}** (미처리)")
+                                        st.error("삭제할 Well을 선택해 주세요.")
 
                 # 2) 행/열 배치 요약 탭
                 with edit_main_tab2:
