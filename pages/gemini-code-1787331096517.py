@@ -150,9 +150,9 @@ def render_compound_inputs(key_prefix, default_comps=None, default_concs=None):
     default_comps = default_comps or []
     default_concs = default_concs or []
     
-    st.caption("🧪 **처리 물질 및 농도 (2쌍씩 입력 가능)**")
+    st.caption("🧪 **처리 물질 및 농도**")
     num_pairs = st.number_input(
-        "입력할 물질 쌍 개수", min_value=1, max_value=10, 
+        "물질 개수", min_value=1, max_value=10, 
         value=max(1, len(default_comps), 2), key=f"{key_prefix}_num_pairs"
     )
     
