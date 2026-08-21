@@ -718,97 +718,112 @@ else:
                                     else:
                                         st.error("최소 하나 이상의 물질명을 입력해 주세요.")
 
-                        else:
-                            st.success(f"🎯 총 **{len(selected_wells)}개** Well 선택됨: `{', '.join(selected_wells)}`")
-                            tab_sub_batch, tab_sub_info = st.tabs(["✏️ 선택 Well 일괄 물질 처리", "📝 선택 Well 개별 수정/조회"])
-
-                            with tab_sub_batch:
-                                st.caption("💡 선택된 모든 Well에 동일한 배지 및 물질 처리를 일괄 저장합니다.")
+                                                  with tab_sub_info:
+                                st.caption("💡 선택된 Well의 개별 이력을 조회하고 수정/삭제하거나, 일괄 삭제할 수 있습니다.")
                                 
-                                r1_c1, r1_c2 = st.columns(2)
-                                with r1_c1:
-                                    b_date = st.date_input("처리 일자", datetime.date.today(), key="batch_date")
-                                with r1_c2:
-                                    st.text_input("대상 웰", value=", ".join(selected_wells), disabled=True, key="batch_wells_display")
-                                
-                                b_cell = st.text_input("세포/오가노이드 정보", placeholder="예: DE, HIO", key="batch_cell")
-                                
-                                r2_c1, r2_c2 = st.columns(2)
-                                with r2_c1:
-                                    b_analysis = st.selectbox("🔬 분석진행 상태", options=ANALYSIS_OPTIONS, key="batch_analysis")
-                                with r2_c2:
-                                    batch_analysis_val = st.session_state.get("batch_analysis", "미진행")
-                                    if batch_analysis_val == "미진행":
-                                        b_basal = st.selectbox("Basal Media (레시피 선택)", options=get_recipe_options(), key="batch_basal")
-                                    else:
-                                        b_basal = "-"
-                                        st.text_input("Basal Media", value="-", disabled=True, key="batch_basal_disabled")
+                                # ----------------------------------------------------
+                                # 1. 선택된 Well의 이력 일괄 삭제 섹션
+                                # ----------------------------------------------------
+                                with st.expander("🗑️ 선택된 Well 이력 일괄 삭제", expanded=False):
+                                    st.warning("⚠️ 지정한 Well에 등록된 모든 처리 이력이 삭제됩니다.")
+                                    wells_to_delete = st.multiselect(
+                                        "삭제할 Well 선택",
+                                        options=selected_wells,
+                                        default=selected_wells,
+                                        key="batch_delete_wells_select"
+                                    )
+                                    if st.button("🚨 선택한 Well의 모든 이력 삭제", key="btn_batch_delete_wells", type="secondary"):
+                                        if wells_to_delete:
+                                            for pos in wells_to_delete:
+                                                if hasattr(db, 'delete_well_treatments'):
+                                                    db.delete_well_treatments(selected_plate['id'], pos)
+                                                elif hasattr(db, 'delete_treatment'):
+                                                    # 개별 아이템 삭제 API만 있는 경우
+                                                    for item in well_all_map.get(pos, []):
+                                                        db.delete_treatment(item['id'])
+                                            st.success(f"✅ {len(wells_to_delete)}개 Well의 이력이 일괄 삭제되었습니다.")
+                                            st.rerun()
+                                        else:
+                                            st.error("삭제할 Well을 선택해 주세요.")
 
-                                if batch_analysis_val == "미진행":
-                                    st.caption("🧪 **처리 물질 및 농도 (2쌍씩 같은 열 관리)**")
-                                    num_b_pairs = st.number_input("입력할 물질 쌍 개수", min_value=1, max_value=10, value=2, key="batch_num_pairs")
-                                    
-                                    b_comps, b_concs = [], []
-                                    for i in range(0, int(num_b_pairs), 2):
-                                        pair_cols = st.columns([2, 1, 2, 1])
-                                        with pair_cols[0]:
-                                            c_val = st.text_input(f"물질 #{i+1}", placeholder="예: VEGF", key=f"batch_c_{i}")
-                                        with pair_cols[1]:
-                                            n_val = st.text_input(f"농도 #{i+1}", placeholder="예: 50 ng/mL", key=f"batch_n_{i}")
-                                        if c_val.strip():
-                                            b_comps.append(c_val.strip())
-                                            b_concs.append(n_val.strip())
-                                            
-                                        if i + 1 < int(num_b_pairs):
-                                            with pair_cols[2]:
-                                                c2_val = st.text_input(f"물질 #{i+2}", placeholder="추가 물질", key=f"batch_c_{i+1}")
-                                            with pair_cols[3]:
-                                                n2_val = st.text_input(f"농도 #{i+2}", placeholder="추가 농도", key=f"batch_n_{i+1}")
-                                            if c2_val.strip():
-                                                b_comps.append(c2_val.strip())
-                                                b_concs.append(n2_val.strip())
-                                else:
-                                    b_basal = "-"
-                                    b_comps = [f"분석 진행 ({batch_analysis_val})"]
-                                    b_concs = [""]
-                                    st.info(f"🔬 **{batch_analysis_val}** 분석 모드입니다.")
+                                st.divider()
 
-                                b_note = st.text_input("비고 / 상세 조건", placeholder="예: Medium change", key="batch_note")
-                                b_file = st.file_uploader("📷 현미경 사진 일괄 첨부 (선택)", type=["png", "jpg", "jpeg"], key="batch_file")
-
-                                if st.button(f"💾 선택한 {len(selected_wells)}개 Well에 일괄 저장", key="btn_batch_save", use_container_width=True, type="primary"):
-                                    if b_comps:
-                                        combined_compounds = ", ".join(b_comps)
-                                        combined_concs = ", ".join(b_concs)
-                                        img_b64 = file_to_base64(b_file)
-                                        comb_note = build_combined_note(b_basal, b_note, img_b64)
-                                        
-                                        for w in selected_wells:
-                                            db.add_treatment(
-                                                selected_plate['id'], w, str(b_date),
-                                                combined_compounds, combined_concs, b_cell.strip(), comb_note, b_analysis
-                                            )
-                                        st.success(f"✅ {len(selected_wells)}개 Well에 일괄 처리 저장 완료!")
-                                        st.rerun()
-                                    else:
-                                        st.error("적어도 하나 이상의 처리 물질명을 입력해 주세요.")
-
-                            with tab_sub_info:
+                                # ----------------------------------------------------
+                                # 2. 개별 Well 이력 조회 및 수정/삭제
+                                # ----------------------------------------------------
                                 for pos in selected_wells:
                                     if pos in well_all_map:
                                         items = well_all_map[pos]
                                         st.markdown(f"**📍 Well {pos}** ({len(items)}건 이력)")
+                                        
                                         for item in items:
+                                            item_id = item['id']
                                             formatted_cond = format_compound_summary(item['compound_name'], item['concentration'])
+                                            
                                             with st.expander(f"📅 {item['treatment_date']} | 🧬 {item.get('cell_info', '-')} | 🧪 {formatted_cond}", expanded=False):
                                                 b_media_val, pure_note_val, cur_img_b64 = parse_note_basal_image(item)
+                                                
+                                                # 이미지 출력
                                                 if cur_img_b64:
                                                     display_image_from_b64(cur_img_b64, caption=f"Well {pos} 사진")
+                                                
+                                                # --- 수정 Form ---
+                                                with st.form(key=f"edit_form_{item_id}"):
+                                                    st.markdown("##### ✏️ 이력 수정")
+                                                    
+                                                    e_col1, e_col2 = st.columns(2)
+                                                    with e_col1:
+                                                        try:
+                                                            default_date = datetime.datetime.strptime(str(item['treatment_date']), "%Y-%m-%d").date()
+                                                        except Exception:
+                                                            default_date = datetime.date.today()
+                                                        edit_date = st.date_input("처리 일자", value=default_date, key=f"e_date_{item_id}")
+                                                    
+                                                    with e_col2:
+                                                        edit_cell = st.text_input("세포/오가노이드 정보", value=item.get('cell_info', ''), key=f"e_cell_{item_id}")
+                                                    
+                                                    e_col3, e_col4 = st.columns(2)
+                                                    with e_col3:
+                                                        edit_comp = st.text_input("처리 물질명", value=item.get('compound_name', ''), key=f"e_comp_{item_id}")
+                                                    with e_col4:
+                                                        edit_conc = st.text_input("농도", value=item.get('concentration', ''), key=f"e_conc_{item_id}")
+                                                    
+                                                    edit_analysis = st.selectbox(
+                                                        "분석 상태", 
+                                                        options=ANALYSIS_OPTIONS, 
+                                                        index=ANALYSIS_OPTIONS.index(item.get('analysis_status')) if item.get('analysis_status') in ANALYSIS_OPTIONS else 0,
+                                                        key=f"e_analysis_{item_id}"
+                                                    )
+                                                    
+                                                    edit_note = st.text_input("비고", value=pure_note_val, key=f"e_note_{item_id}")
+                                                    
+                                                    btn_col1, btn_col2 = st.columns([1, 1])
+                                                    with btn_col1:
+                                                        submit_update = st.form_submit_button("💾 수정 사항 저장", use_container_width=True, type="primary")
+                                                    
+                                                    if submit_update:
+                                                        updated_comb_note = build_combined_note(b_media_val, edit_note, cur_img_b64)
+                                                        # DB 업데이트 함수 호출
+                                                        if hasattr(db, 'update_treatment'):
+                                                            db.update_treatment(
+                                                                item_id, str(edit_date), edit_comp.strip(), 
+                                                                edit_conc.strip(), edit_cell.strip(), updated_comb_note, edit_analysis
+                                                            )
+                                                            st.success("수정되었습니다!")
+                                                            st.rerun()
+                                                        else:
+                                                            st.error("db 객체에 update_treatment 메서드가 정의되어 있지 않습니다.")
+
+                                                # --- 개별 삭제 버튼 ---
+                                                if st.button("🗑️ 이 이력 삭제", key=f"btn_del_{item_id}", type="secondary"):
+                                                    if hasattr(db, 'delete_treatment'):
+                                                        db.delete_treatment(item_id)
+                                                        st.success(f"Well {pos}의 해당 이력이 삭제되었습니다.")
+                                                        st.rerun()
+                                                    else:
+                                                        st.error("db 객체에 delete_treatment 메서드가 정의되어 있지 않습니다.")
                                     else:
                                         st.markdown(f"**📍 Well {pos}** (미처리)")
-
-                    else:
-                        st.info("💡 왼쪽 차트에서 Well을 클릭하거나 마우스로 영역을 드래그(Box/Lasso)하세요.")
 
                 # 2) 행/열 배치 요약 탭
                 with edit_main_tab2:
