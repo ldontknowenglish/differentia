@@ -464,18 +464,94 @@ else:
                         key="selected_wells_multiselect"
                     )
 
-                    if selected_wells:
+            if selected_wells:
                         if len(selected_wells) == 1:
                             pos = selected_wells[0]
                             st.success(f"🎯 **Well [{pos}]** 가 선택되었습니다.")
 
-                            if pos in well_all_map:
-                                items = well_all_map[pos]
-                                st.markdown(f"##### 📝 Well [{pos}] 기존 처리 이력 ({len(items)}건)")
+                            items = well_all_map.get(pos, [])
+
+                            # =========================================================
+                            # 1. [상단 배치] 새 추가 처리 및 사진 작성 영역 (항상 위에 위치)
+                            # =========================================================
+                            with st.expander(f"➕ Well [{pos}] 신규 처리 및 사진 작성", expanded=True):
+                                r1_c1, r1_c2 = st.columns(2)
+                                with r1_c1:
+                                    ex_d = st.date_input("처리 일자", datetime.date.today(), key=f"ex_d_{pos}")
+                                with r1_c2:
+                                    st.text_input("웰 위치", value=pos, disabled=True, key=f"ex_pos_{pos}")
+
+                                ex_cell = st.text_input("세포 정보", placeholder="예: iPSC, HIO", key=f"ex_cell_{pos}")
+                                
+                                r2_c1, r2_c2 = st.columns(2)
+                                with r2_c1:
+                                    ex_analysis = st.selectbox("🔬 분석진행 상태", options=ANALYSIS_OPTIONS, key=f"ex_analysis_{pos}")
+                                
+                                ex_analysis_val = st.session_state.get(f"ex_analysis_{pos}", "미진행")
+                                
+                                with r2_c2:
+                                    if ex_analysis_val == "미진행":
+                                        ex_basal = st.selectbox("Basal Media (레시피 선택)", options=get_recipe_options(), key=f"ex_basal_{pos}")
+                                    else:
+                                        ex_basal = "-"
+                                        st.text_input("Basal Media", value="-", disabled=True, key=f"ex_basal_disabled_{pos}")
+
+                                if ex_analysis_val == "미진행":
+                                    st.caption("🧪 **처리 물질 및 농도 (2쌍씩 같은 열 관리)**")
+                                    num_ex_pairs = st.number_input("입력할 물질 쌍 개수", min_value=1, max_value=10, value=2, key=f"ex_num_pairs_{pos}")
+                                    
+                                    ex_comps, ex_concs = [], []
+                                    for i in range(0, int(num_ex_pairs), 2):
+                                        pair_cols = st.columns([2, 1, 2, 1])
+                                        with pair_cols[0]:
+                                            c1_val = st.text_input(f"물질 #{i+1}", placeholder="예: VEGF", key=f"ex_c_{pos}_{i}")
+                                        with pair_cols[1]:
+                                            n1_val = st.text_input(f"농도 #{i+1}", placeholder="예: 50 ng/mL", key=f"ex_n_{pos}_{i}")
+                                        if c1_val.strip():
+                                            ex_comps.append(c1_val.strip())
+                                            ex_concs.append(n1_val.strip())
+                                            
+                                        if i + 1 < int(num_ex_pairs):
+                                            with pair_cols[2]:
+                                                c2_val = st.text_input(f"물질 #{i+2}", placeholder="추가 물질", key=f"ex_c_{pos}_{i+1}")
+                                            with pair_cols[3]:
+                                                n2_val = st.text_input(f"농도 #{i+2}", placeholder="추가 농도", key=f"ex_n_{pos}_{i+1}")
+                                            if c2_val.strip():
+                                                ex_comps.append(c2_val.strip())
+                                                ex_concs.append(n2_val.strip())
+                                    ex_comp_str = ", ".join(ex_comps)
+                                    ex_conc_str = ", ".join(ex_concs)
+                                else:
+                                    ex_comp_str = f"분석 진행 ({ex_analysis_val})"
+                                    ex_conc_str = ""
+                                    st.info(f"🔬 **{ex_analysis_val}** 분석 모드입니다.")
+
+                                ex_note = st.text_input("비고", placeholder="상세 조건", key=f"ex_note_{pos}")
+                                ex_file = st.file_uploader("📷 현미경 사진 첨부 (선택)", type=["png", "jpg", "jpeg"], key=f"ex_file_{pos}")
+
+                                if st.button(f"💾 Well [{pos}] 처리 저장", key=f"btn_ex_save_{pos}", use_container_width=True, type="primary"):
+                                    if ex_analysis_val != "미진행" or ex_comp_str.strip():
+                                        img_b64 = file_to_base64(ex_file)
+                                        comb_note = build_combined_note(ex_basal, ex_note, img_b64)
+                                        db.add_treatment(
+                                            selected_plate['id'], pos, str(ex_d),
+                                            ex_comp_str, ex_conc_str, ex_cell.strip(), comb_note, ex_analysis
+                                        )
+                                        st.toast(f"Well [{pos}] 처리가 저장되었습니다!", icon="✅")
+                                        st.rerun()
+                                    else:
+                                        st.error("처리 물질명을 입력해 주세요.")
+
+                            # =========================================================
+                            # 2. [하단 배치] 기존 처리 이력 목록 (아래로 이동)
+                            # =========================================================
+                            if items:
+                                st.markdown("---")
+                                st.markdown(f"##### 📜 Well [{pos}] 이전 처리 이력 ({len(items)}건)")
                                 
                                 for item in items:
                                     formatted_cond = format_compound_summary(item['compound_name'], item['concentration'])
-                                    with st.expander(f"📅 {item['treatment_date']} | 🧬 {item.get('cell_info', '-')} | 🧪 {formatted_cond}", expanded=True):
+                                    with st.expander(f"📅 {item['treatment_date']} | 🧬 {item.get('cell_info', '-')} | 🧪 {formatted_cond}", expanded=False):
                                         try:
                                             def_d = datetime.datetime.strptime(item['treatment_date'], "%Y-%m-%d").date()
                                         except:
@@ -579,144 +655,6 @@ else:
                                                 db.delete_treatment(item['id'])
                                                 st.toast("삭제되었습니다.", icon="🗑️")
                                                 st.rerun()
-
-                                with st.expander(f"➕ Well [{pos}]에 추가 처리 및 사진 작성", expanded=False):
-                                    r1_c1, r1_c2 = st.columns(2)
-                                    with r1_c1:
-                                        ex_d = st.date_input("처리 일자", datetime.date.today(), key=f"ex_d_{pos}")
-                                    with r1_c2:
-                                        st.text_input("웰 위치", value=pos, disabled=True, key=f"ex_pos_{pos}")
-
-                                    ex_cell = st.text_input("세포 정보", placeholder="예: iPSC", key=f"ex_cell_{pos}")
-                                    
-                                    r2_c1, r2_c2 = st.columns(2)
-                                    with r2_c1:
-                                        ex_analysis = st.selectbox("🔬 분석진행 상태", options=ANALYSIS_OPTIONS, key=f"ex_analysis_{pos}")
-                                    
-                                    ex_analysis_val = st.session_state.get(f"ex_analysis_{pos}", "미진행")
-                                    
-                                    with r2_c2:
-                                        if ex_analysis_val == "미진행":
-                                            ex_basal = st.selectbox("Basal Media (레시피 선택)", options=get_recipe_options(), key=f"ex_basal_{pos}")
-                                        else:
-                                            ex_basal = "-"
-                                            st.text_input("Basal Media", value="-", disabled=True, key=f"ex_basal_disabled_{pos}")
-
-                                    if ex_analysis_val == "미진행":
-                                        st.caption("🧪 **처리 물질 및 농도 (2쌍씩 같은 열 관리)**")
-                                        num_ex_pairs = st.number_input("입력할 물질 쌍 개수", min_value=1, max_value=10, value=2, key=f"ex_num_pairs_{pos}")
-                                        
-                                        ex_comps, ex_concs = [], []
-                                        for i in range(0, int(num_ex_pairs), 2):
-                                            pair_cols = st.columns([2, 1, 2, 1])
-                                            with pair_cols[0]:
-                                                c1_val = st.text_input(f"물질 #{i+1}", placeholder="예: VEGF", key=f"ex_c_{pos}_{i}")
-                                            with pair_cols[1]:
-                                                n1_val = st.text_input(f"농도 #{i+1}", placeholder="예: 50 ng/mL", key=f"ex_n_{pos}_{i}")
-                                            if c1_val.strip():
-                                                ex_comps.append(c1_val.strip())
-                                                ex_concs.append(n1_val.strip())
-                                                
-                                            if i + 1 < int(num_ex_pairs):
-                                                with pair_cols[2]:
-                                                    c2_val = st.text_input(f"물질 #{i+2}", placeholder="추가 물질", key=f"ex_c_{pos}_{i+1}")
-                                                with pair_cols[3]:
-                                                    n2_val = st.text_input(f"농도 #{i+2}", placeholder="추가 농도", key=f"ex_n_{pos}_{i+1}")
-                                                if c2_val.strip():
-                                                    ex_comps.append(c2_val.strip())
-                                                    ex_concs.append(n2_val.strip())
-                                        ex_comp_str = ", ".join(ex_comps)
-                                        ex_conc_str = ", ".join(ex_concs)
-                                    else:
-                                        ex_comp_str = f"분석 진행 ({ex_analysis_val})"
-                                        ex_conc_str = ""
-                                        st.info(f"🔬 **{ex_analysis_val}** 분석 모드입니다.")
-
-                                    ex_note = st.text_input("비고", placeholder="상세 조건", key=f"ex_note_{pos}")
-                                    ex_file = st.file_uploader("📷 현미경 사진 첨부 (선택)", type=["png", "jpg", "jpeg"], key=f"ex_file_{pos}")
-
-                                    if st.button(f"💾 Well [{pos}] 추가 저장", key=f"btn_ex_save_{pos}", use_container_width=True, type="primary"):
-                                        if ex_analysis_val != "미진행" or ex_comp_str.strip():
-                                            img_b64 = file_to_base64(ex_file)
-                                            comb_note = build_combined_note(ex_basal, ex_note, img_b64)
-                                            db.add_treatment(
-                                                selected_plate['id'], pos, str(ex_d),
-                                                ex_comp_str, ex_conc_str, ex_cell.strip(), comb_note, ex_analysis
-                                            )
-                                            st.toast(f"Well [{pos}] 추가 처리가 저장되었습니다!", icon="✅")
-                                            st.rerun()
-                                        else:
-                                            st.error("처리 물질명을 입력해 주세요.")
-                            else:
-                                st.markdown(f"##### ➕ Well [{pos}] 신규 물질 처리 및 사진 작성")
-                                st.caption("선택하신 Well은 현재 미처리 상태입니다.")
-
-                                r1_c1, r1_c2 = st.columns(2)
-                                with r1_c1:
-                                    e_d = st.date_input("처리 일자", datetime.date.today(), key=f"e_d_{pos}")
-                                with r1_c2:
-                                    st.text_input("웰 위치", value=pos, disabled=True, key=f"e_pos_{pos}")
-
-                                e_cell = st.text_input("세포/오가노이드 정보", placeholder="예: DE, HIO", key=f"e_cell_{pos}")
-
-                                r2_c1, r2_c2 = st.columns(2)
-                                with r2_c1:
-                                    e_analysis = st.selectbox("🔬 분석진행 상태", options=ANALYSIS_OPTIONS, key=f"e_analysis_{pos}")
-                                with r2_c2:
-                                    e_analysis_val = st.session_state.get(f"e_analysis_{pos}", "미진행")
-                                    if e_analysis_val == "미진행":
-                                        e_basal = st.selectbox("Basal Media (레시피 선택)", options=get_recipe_options(), key=f"e_basal_{pos}")
-                                    else:
-                                        e_basal = "-"
-                                        st.text_input("Basal Media", value="-", disabled=True, key=f"e_basal_disabled_{pos}")
-
-                                if e_analysis_val == "미진행":
-                                    st.caption("🧪 **처리 물질 및 농도 (2쌍씩 같은 열 관리)**")
-                                    num_e_pairs = st.number_input("입력할 물질 쌍 개수", min_value=1, max_value=10, value=2, key=f"e_num_pairs_{pos}")
-                                    
-                                    e_comps, e_concs = [], []
-                                    for i in range(0, int(num_e_pairs), 2):
-                                        pair_cols = st.columns([2, 1, 2, 1])
-                                        with pair_cols[0]:
-                                            c_val = st.text_input(f"물질 #{i+1}", placeholder="예: VEGF", key=f"e_c_{pos}_{i}")
-                                        with pair_cols[1]:
-                                            n_val = st.text_input(f"농도 #{i+1}", placeholder="예: 50 ng/mL", key=f"e_n_{pos}_{i}")
-                                        if c_val.strip():
-                                            e_comps.append(c_val.strip())
-                                            e_concs.append(n_val.strip())
-                                            
-                                        if i + 1 < int(num_e_pairs):
-                                            with pair_cols[2]:
-                                                c2_val = st.text_input(f"물질 #{i+2}", placeholder="추가 물질", key=f"e_c_{pos}_{i+1}")
-                                            with pair_cols[3]:
-                                                n2_val = st.text_input(f"농도 #{i+2}", placeholder="추가 농도", key=f"e_n_{pos}_{i+1}")
-                                            if c2_val.strip():
-                                                e_comps.append(c2_val.strip())
-                                                e_concs.append(n2_val.strip())
-                                else:
-                                    e_basal = "-"
-                                    e_comps = [f"분석 진행 ({e_analysis_val})"]
-                                    e_concs = [""]
-                                    st.info(f"🔬 **{e_analysis_val}** 분석 모드입니다.")
-
-                                e_note = st.text_input("비고 / 상세 조건", placeholder="예: Daily media change", key=f"e_note_{pos}")
-                                e_file = st.file_uploader("📷 현미경 사진 첨부 (선택)", type=["png", "jpg", "jpeg"], key=f"e_file_{pos}")
-
-                                if st.button(f"💾 Well [{pos}] 처리 저장", key=f"btn_empty_save_{pos}", use_container_width=True, type="primary"):
-                                    if e_comps:
-                                        comb_comp = ", ".join(e_comps)
-                                        comb_conc = ", ".join(e_concs)
-                                        img_b64 = file_to_base64(e_file)
-                                        comb_note = build_combined_note(e_basal, e_note, img_b64)
-                                        
-                                        db.add_treatment(
-                                            selected_plate['id'], pos, str(e_d),
-                                            comb_comp, comb_conc, e_cell.strip(), comb_note, e_analysis
-                                        )
-                                        st.success(f"✅ Well [{pos}] 처리가 저장되었습니다!")
-                                        st.rerun()
-                                    else:
-                                        st.error("최소 하나 이상의 물질명을 입력해 주세요.")
 
                         else:
                             st.success(f"🎯 총 **{len(selected_wells)}개** Well 선택됨: `{', '.join(selected_wells)}`")
