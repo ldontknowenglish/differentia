@@ -464,7 +464,7 @@ else:
                         key="selected_wells_multiselect"
                     )
 
-            if selected_wells:
+                    if selected_wells:
                         if len(selected_wells) == 1:
                             pos = selected_wells[0]
                             st.success(f"🎯 **Well [{pos}]** 가 선택되었습니다.")
