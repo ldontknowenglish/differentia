@@ -185,7 +185,7 @@ def render_compound_inputs(key_prefix, default_comps=None, default_concs=None):
 
 def generate_dynamic_lineage_dot(treatments):
     """
-    12-well -> 24-well 이동 및 DE_1 실험 진행에 맞춘 계통도 연결 알고리즘 개선
+    passage 실험 진행에 맞춘 계통도 연결 알고리즘 개선
     """
     if not treatments: return None
     df = pd.DataFrame(treatments)
@@ -510,11 +510,11 @@ def render_tab_visualization(selected_plate, treatments):
                 else:
                     st.success(f"🎯 총 **{len(selected_wells)}개** Well 선택됨")
                     
-                    st.markdown("<div class='transfer-box'><b>🔄 선택한 Well 전체 12-well -> 24-well 이동 일괄 작성</b>", unsafe_allow_html=True)
-                    batch_trans = st.checkbox("12-well 플레이트에서 일괄 이식된 샘플인가요?", key="batch_trans")
+                    st.markdown("<div class='transfer-box'><b>🔄 선택한 passaging 일괄 작성</b>", unsafe_allow_html=True)
+                    batch_trans = st.checkbox("passaging 진행된 샘플인가요?", key="batch_trans")
                     batch_src = ""
                     if batch_trans:
-                        batch_src = st.text_input("출처 12-well 위치", value="12WP-A1", key="batch_src")
+                        batch_src = st.text_input("출처 위치", value="12WP-A1", key="batch_src")
                     st.markdown("</div>", unsafe_allow_html=True)
 
                     b_date = st.date_input("일괄 처리 일자", datetime.date.today(), key="batch_date")
@@ -527,7 +527,7 @@ def render_tab_visualization(selected_plate, treatments):
                     else:
                         b_basal, b_comp_str, b_conc_str = "-", f"분석 진행 ({b_analysis})", ""
 
-                    default_batch_note = f"12WP({batch_src})에서 24WP로 계대 분할" if batch_trans else ""
+                    default_batch_note = f"({batch_src})에서 passaging" if batch_trans else ""
                     b_note = st.text_input("비고", value=default_batch_note, key="batch_note")
                     b_file = st.file_uploader("📷 현미경 사진 첨부", type=["png", "jpg", "jpeg"], key="batch_file")
 
@@ -583,8 +583,8 @@ def render_tab_management(selected_plate, treatments):
     t_date = r1_c1.date_input("처리 일자 (Date)", datetime.date.today(), key="t_date_main")
     t_well = r1_c2.text_input("웰 위치 (Well Position)*", placeholder="예: A1, B2 또는 A1,A2,A3", key="t_well_main")
     
-    # --- 12-well -> 24-well 계대/이동 가이드 ---
-    st.markdown("<div class='transfer-box'><b>🔄 DE_1 실험: 12-well -> 24-well 계대/이동 기록 가이드</b><br><small>12-well에서 분할 이식하는 경우 세포 정보에 'DE_1_P1' 또는 비고란에 출처 웰을 명시하면 계통도 추적이 수월해집니다.</small></div>", unsafe_allow_html=True)
+    # --- passaging 가이드 ---
+    st.markdown("<div class='transfer-box'><b>🔄 passaging 기록 가이드</b><br><small>passaging 하는 경우 세포 정보에 'DE_1_P1' 또는 비고란에 출처 웰을 명시하면 계통도 추적이 수월해집니다.</small></div>", unsafe_allow_html=True)
     
     t_cell = st.text_input("세포/오가노이드 정보", value="DE_1", placeholder="예: DE_1, DE_1_P1", key="t_cell_main")
     t_analysis = st.selectbox("🔬 분석진행 상태", options=ANALYSIS_OPTIONS, key="t_analysis_main")
@@ -596,7 +596,7 @@ def render_tab_management(selected_plate, treatments):
         t_basal, t_comp_str, t_conc_str = "-", f"분석 진행 ({t_analysis})", ""
         st.info(f"🔬 **{t_analysis}** 분석 모드입니다.")
 
-    t_note = st.text_input("비고 / 상세 조건", placeholder="예: 12-well Plate A1에서 24-well Plate로 계대(Subculture) 이동", key="t_note_main")
+    t_note = st.text_input("비고 / 상세 조건", placeholder="예: passaging", key="t_note_main")
     t_file = st.file_uploader("📷 현미경 사진 첨부 (선택)", type=["png", "jpg", "jpeg"], key="t_file_upload_main")
 
     if st.button("처리 내역 및 사진 저장", use_container_width=True, type="primary", key="btn_t_main_save"):
