@@ -332,6 +332,7 @@ def generate_project_cell_lineage_dot(project_id):
             
             if c_info:
                 # 동일한 세포/실험명(c_info)이면 노드를 하나로 합치고 위치 및 날짜 업데이트
+                loc_str = f"{p_name} {w_pos}"
                 if c_info not in nodes_info:
                     nodes_info[c_info] = {
                         'first_date': t_date, 
@@ -342,10 +343,7 @@ def generate_project_cell_lineage_dot(project_id):
                 else:
                     nodes_info[c_info]['plates'].add(p_name)
                     nodes_info[c_info]['locations'].add(loc_str)
-                    nodes_info[c_info]['count'] += 1
-                    if t_date < nodes_info[c_info]['first_date']:
-                        nodes_info[c_info]['first_date'] = t_date
-
+                
                 if not cell_history or cell_history[-1][0] != c_info:
                     cell_history.append((c_info, t_date, p_name, w_pos))
 
