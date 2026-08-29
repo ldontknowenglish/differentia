@@ -289,6 +289,10 @@ def render_analysis_status_manager():
 # 가로(Horizontal) 흐름이 적용된 통합 계통도 생성 함수
 # ======================================================================
 def generate_project_cell_lineage_dot(project_id):
+# ======================================================================
+# 가로(Horizontal) 흐름 및 동일 세포/실험 추적 계통도 생성 함수
+# ======================================================================
+def generate_project_cell_lineage_dot(project_id):
     plates = db.get_plates(project_id)
     if not plates:
         return None, []
@@ -309,42 +313,55 @@ def generate_project_cell_lineage_dot(project_id):
     if 'cell_info' not in df.columns:
         return None, []
 
+    # 세포 정보가 빈 값이 아닌 데이터만 필터링
     df = df[df['cell_info'].notnull() & (df['cell_info'].str.strip() != "")]
     if df.empty:
         return None, []
 
+    # 날짜, 플레이트, 웰 순으로 정렬
     df = df.sort_values(by=['treatment_date', 'plate_name', 'well_position'])
 
     nodes_info = {}
     edges = set()
 
+    # 1. 세포 노드(Node) 및 히스토리 수집
     for (plate_id, well), group in df.groupby(['plate_id', 'well_position']):
         cell_history = []
         for _, row in group.iterrows():
             c_info = str(row['cell_info']).strip()
             t_date = str(row['treatment_date']).strip()
             p_name = row['plate_name']
+            w_pos = row['well_position']
+            loc_str = f"{p_name} {w_pos}"
             
             if c_info:
+                # 동일한 세포/실험명(c_info)이면 노드를 하나로 합치고 위치 및 날짜 업데이트
                 if c_info not in nodes_info:
-                    nodes_info[c_info] = {'first_date': t_date, 'plates': {p_name}, 'count': 1}
+                    nodes_info[c_info] = {
+                        'first_date': t_date, 
+                        'plates': {p_name}, 
+                        'locations': {loc_str}, 
+                        'count': 1
+                    }
                 else:
                     nodes_info[c_info]['plates'].add(p_name)
+                    nodes_info[c_info]['locations'].add(loc_str)
                     nodes_info[c_info]['count'] += 1
                     if t_date < nodes_info[c_info]['first_date']:
                         nodes_info[c_info]['first_date'] = t_date
 
                 if not cell_history or cell_history[-1][0] != c_info:
-                    cell_history.append((c_info, t_date, p_name))
+                    cell_history.append((c_info, t_date, p_name, w_pos))
 
+        # 동일 well 내에서 세포 이름이 변경/전이된 경우 엣지 연결
         for i in range(len(cell_history) - 1):
             src_cell = cell_history[i][0]
             dst_cell = cell_history[i + 1][0]
             dst_date = cell_history[i + 1][1]
             if src_cell != dst_cell:
-                edges.add((src_cell, dst_cell, dst_date, "Passage/Transition"))
+                edges.add((src_cell, dst_cell, dst_date, "Transition"))
 
-    # 계대 태그 [PassageFrom:] 기반 Edge 파싱
+    # 2. 계대 태그 [PassageFrom:] 기반 추적 및 연결(Edge) 생성
     for _, row in df.iterrows():
         c_info = str(row['cell_info']).strip()
         note = str(row.get('note', ''))
@@ -356,31 +373,41 @@ def generate_project_cell_lineage_dot(project_id):
                 e = note.find("]", s)
                 content = note[s:e].strip()
                 parts = content.split('|')
-                src_well_info = parts[0]
-                reagent = parts[1] if len(parts) > 1 else ""
-                seeding = parts[2] if len(parts) > 2 else ""
+                src_well_info = parts[0].strip() # 출처 플레이트/웰 또는 세포명
+                reagent = parts[1].strip() if len(parts) > 1 else ""
+                seeding = parts[2].strip() if len(parts) > 2 else ""
                 
                 label_details = []
                 if reagent: label_details.append(reagent)
                 if seeding: label_details.append(seeding)
                 detail_str = f" ({', '.join(label_details)})" if label_details else ""
 
-                for existing_cell in nodes_info.keys():
-                    if existing_cell.lower() in src_well_info.lower() and existing_cell != c_info:
-                        edges.add((existing_cell, c_info, t_date, f"Passage{detail_str}"))
-            except:
+                # 💡 출처 정보를 기반으로 기존 세포 노드 찾기
+                for existing_cell, info in nodes_info.items():
+                    # 조건 A: 출처 텍스트에 이전 세포 이름이 직접 포함된 경우
+                    # 조건 B: 출처 텍스트에 이전 웰 정보(예: "24-Well Plate A1")가 포함된 경우
+                    is_matched_cell = existing_cell.lower() in src_well_info.lower()
+                    is_matched_loc = any(loc.lower() in src_well_info.lower() for loc in info['locations'])
+
+                    if (is_matched_cell or is_matched_loc):
+                        # 동일한 제목/이름이면 자기 자신을 가리키는 순환 참조(Self-loop) 대신 
+                        # 노드는 하나로 유지되며 진행 상태로 이어집니다.
+                        if existing_cell != c_info:
+                            edges.add((existing_cell, c_info, t_date, f"Passage{detail_str}"))
+            except Exception:
                 pass
 
     if not nodes_info:
         return None, []
 
+    # 최상위 원천(시작) 세포 탐색
     dst_nodes = {e[1] for e in edges}
     root_cells = [c for c in nodes_info.keys() if c not in dst_nodes]
     if not root_cells:
         min_date = min(n['first_date'] for n in nodes_info.values())
         root_cells = [c for c, n in nodes_info.items() if n['first_date'] == min_date]
 
-    # rankdir=LR로 가로 방향(Left to Right) 진행 설정
+    # Graphviz Dot 문법 생성 (가로 방향 LR)
     dot_lines = [
         "digraph ProjectLineage { rankdir=LR; newrank=true;",
         "    graph [nodesep=0.6, ranksep=1.2, margin=0, pad=0.3, splines=ortho];",
@@ -408,10 +435,12 @@ def generate_project_cell_lineage_dot(project_id):
                 f'    "{clean_name}" [label="{label}", fillcolor="#eff6ff", color="#2563eb", penwidth=1.2, fontcolor="#1e3a8a"];'
             )
 
+    # 같은 일자의 노드들을 동일한 열(Rank)에 위치시킴
     for t_date, nodes in sorted(date_to_nodes.items()):
         nodes_str = "; ".join([f'"{n}"' for n in nodes])
         dot_lines.append(f'    {{ rank=same; {nodes_str}; }}')
 
+    # 화살표(Edge) 그리기
     for src, dst, t_date, label in edges:
         c_src = src.replace('"', '\\"')
         c_dst = dst.replace('"', '\\"')
@@ -420,6 +449,7 @@ def generate_project_cell_lineage_dot(project_id):
 
     dot_lines.append("}")
     return "\n".join(dot_lines), root_cells
+
 
 # ======================================================================
 # 3. 각 탭별 Render 함수
