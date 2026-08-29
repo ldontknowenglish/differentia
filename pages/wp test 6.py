@@ -563,9 +563,9 @@ def render_tab_visualization(selected_plate, treatments):
                     hover_texts.append(
                         f"<b>[Well {pos}]</b> {has_img}<br>"
                         f"🧫 <b>세포 정보:</b> {item.get('cell_info', '-')}<br>"
-                        f"🔬 <b>분석 진행:</b> {analysis_val}<br>"
-                        f"🥛 <b>Basal Media:</b> {get_basal_media(item)}<br>"
+                        f"🔬 <b>분석 진행:</b> {analysis_val}<br>"                       
                         f"🧪 <b>처리 조건:</b> {format_compound_summary(item['compound_name'], item['concentration'])}<br>"
+                        f"🥛 <b>Basal Media:</b> {get_basal_media(item)}<br>"
                         f"📅 <b>일자:</b> {item['treatment_date']}"
                     )
                 else:
